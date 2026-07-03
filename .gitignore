@@ -1,0 +1,41 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+.env
+
+# Vite preview (HTML de un solo archivo — generado, no versionado)
+dist-preview/
+
+# Android (se regenera con `npx cap sync android`)
+android/app/build
+android/build
+android/.gradle
+android/local.properties
+android/app/release
+android/app/debug
+
+# Keystores — NO subir al repo; guardar en lugar seguro (ver README)
+*.jks
+*.keystore
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

@@ -1,0 +1,317 @@
+/* ---------- Layout general ---------- */
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 18px 14px;
+}
+.app-header h1 {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+.subtitulo {
+  margin: 2px 0 0;
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+.btn-ajustes {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  width: 40px; height: 40px;
+  font-size: 18px;
+}
+
+/* ---------- Lista de encuestas ---------- */
+.lista-contenedor {
+  max-width: 640px;
+  margin: 0 auto;
+  padding-bottom: 40px;
+}
+
+.barra-sync {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 18px 8px;
+  padding: 10px 14px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.indicador-conexion { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; }
+.indicador-conexion .punto { width: 8px; height: 8px; border-radius: 50%; }
+.indicador-conexion.online .punto { background: var(--verde); }
+.indicador-conexion.offline .punto { background: var(--cereza); }
+.indicador-conexion.online { color: var(--verde-oscuro); }
+.indicador-conexion.offline { color: var(--cereza); }
+
+.btn-sync {
+  background: var(--verde);
+  color: white;
+  border: none;
+  border-radius: 999px;
+  padding: 8px 16px;
+  font-weight: 600;
+  font-size: 13px;
+}
+.btn-sync:disabled { opacity: 0.45; }
+
+.mensaje-sync {
+  margin: 8px 18px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.btn-nueva-encuesta {
+  display: block;
+  width: calc(100% - 36px);
+  margin: 14px 18px;
+  padding: 15px;
+  background: var(--verde-oscuro);
+  color: white;
+  border: none;
+  border-radius: var(--radius);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.lista-encuestas { list-style: none; margin: 0; padding: 0 18px; display: flex; flex-direction: column; gap: 10px; }
+.lista-vacia { color: var(--ink-soft); text-align: center; padding: 40px 0; font-size: 14px; }
+
+.tarjeta-encuesta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+.tarjeta-info { display: flex; flex-direction: column; gap: 2px; }
+.tarjeta-info strong { font-family: var(--font-display); font-size: 15px; }
+.tarjeta-info span { font-size: 12.5px; color: var(--ink-soft); }
+.tarjeta-info .fecha { font-size: 11px; }
+
+.tarjeta-acciones { display: flex; align-items: center; gap: 10px; }
+.sello {
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1.5px solid;
+  transform: rotate(-3deg);
+}
+.sello.borrador { color: var(--ocre); border-color: var(--ocre); }
+.sello.sincronizado { color: var(--verde); border-color: var(--verde); }
+
+.btn-borrar {
+  background: none;
+  border: none;
+  font-size: 16px;
+  opacity: 0.6;
+}
+
+/* ---------- Wizard ---------- */
+.wizard { max-width: 640px; margin: 0 auto; padding-bottom: 100px; min-height: 100vh; }
+
+.wizard-encabezado {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px 8px;
+}
+.wizard-titulo { font-family: var(--font-display); font-weight: 600; font-size: 15px; color: var(--ink-soft); }
+
+.btn-texto { background: none; border: none; color: var(--verde-oscuro); font-weight: 600; font-size: 14px; padding: 0; }
+
+.stepper {
+  display: flex;
+  overflow-x: auto;
+  gap: 4px;
+  padding: 8px 18px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  padding: 4px 10px;
+  min-width: 58px;
+  color: var(--ink-soft);
+  flex-shrink: 0;
+}
+.step-numero {
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  border: 1.5px solid var(--line);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 600;
+}
+.step-nombre { font-size: 10.5px; font-weight: 600; white-space: nowrap; }
+.step.activo .step-numero { background: var(--verde-oscuro); border-color: var(--verde-oscuro); color: white; }
+.step.activo .step-nombre { color: var(--verde-oscuro); }
+.step.completo .step-numero { background: var(--verde); border-color: var(--verde); color: white; }
+
+.wizard-cuerpo { padding: 18px; }
+
+.wizard-pie {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  display: flex;
+  gap: 10px;
+  padding: 12px 18px calc(12px + env(safe-area-inset-bottom));
+  background: var(--paper);
+  border-top: 1px solid var(--line);
+  max-width: 640px;
+  margin: 0 auto;
+}
+.btn-primario, .btn-secundario {
+  flex: 1;
+  padding: 14px;
+  border-radius: var(--radius);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 15px;
+  border: none;
+}
+.btn-primario { background: var(--verde-oscuro); color: white; }
+.btn-primario:disabled { opacity: 0.5; }
+.btn-secundario { background: var(--card); border: 1px solid var(--line); color: var(--ink); }
+.btn-secundario:disabled { opacity: 0.4; }
+
+/* ---------- Campos de formulario ---------- */
+.grid-campos {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px 12px;
+}
+.campo { display: flex; flex-direction: column; gap: 5px; }
+.campo-etiqueta { font-size: 12.5px; font-weight: 600; color: var(--ink-soft); }
+.campo-etiqueta em { color: var(--cereza); font-style: normal; margin-left: 2px; }
+.campo input, .campo select, .campo textarea {
+  padding: 11px 12px;
+  border: 1.5px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--ink);
+}
+.campo input:focus, .campo select:focus, .campo textarea:focus {
+  outline: 2px solid var(--verde);
+  outline-offset: 1px;
+  border-color: var(--verde);
+}
+.ancho-completo { grid-column: 1 / -1; }
+
+.campo-gps { display: flex; flex-direction: column; gap: 8px; }
+.gps-lectura { display: flex; gap: 16px; font-size: 12.5px; color: var(--ink-soft); }
+.gps-estado { font-size: 12.5px; color: var(--ocre); margin-top: 8px; }
+
+/* ---------- Pestañas de lotes ---------- */
+.pestanas-lotes {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  margin-bottom: 16px;
+  padding-bottom: 4px;
+}
+.pestana-lote {
+  flex-shrink: 0;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1.5px solid var(--line);
+  background: var(--card);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+.pestana-lote.activa { background: var(--verde-oscuro); border-color: var(--verde-oscuro); color: white; }
+.pestana-lote.agregar { color: var(--verde); border-color: var(--verde); border-style: dashed; }
+
+.btn-quitar-lote {
+  margin-top: 16px;
+  background: none;
+  border: none;
+  color: var(--cereza);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* ---------- Ajustes ---------- */
+.ajustes-contenedor { max-width: 640px; margin: 0 auto; padding: 0 18px 40px; }
+.ajustes-bloque {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ajustes-bloque h2 { font-family: var(--font-display); font-size: 15px; margin: 0; }
+.ayuda { font-size: 12.5px; color: var(--ink-soft); margin: 0; }
+
+@media (max-width: 420px) {
+  .grid-campos { grid-template-columns: 1fr; }
+}
+
+/* ---------- Inicio (selector de módulo) ---------- */
+.tarjetas-inicio {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 8px 18px 24px;
+}
+.tarjeta-modulo {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 20px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  text-align: left;
+}
+.tarjeta-modulo-icono { font-size: 28px; }
+.tarjeta-modulo-nombre {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 16px;
+  flex: 1;
+}
+.tarjeta-modulo-conteo {
+  font-size: 12px;
+  color: var(--ink-soft);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 10px;
+}
+
+/* ---------- Wizard genérico ---------- */
+.seccion-titulo {
+  font-family: var(--font-display);
+  font-size: 16px;
+  margin: 0 0 14px;
+  color: var(--verde-oscuro);
+}
+.campo-calculado {
+  padding: 11px 12px;
+  border: 1.5px dashed var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink-soft);
+  font-weight: 600;
+}

@@ -1,0 +1,56 @@
+@import '@fontsource/space-grotesk/500.css';
+@import '@fontsource/space-grotesk/600.css';
+@import '@fontsource/space-grotesk/700.css';
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/600.css';
+
+:root {
+  /* Paleta: cuaderno de campo — sague/pergamino + verde cafetal + cereza + ocre tierra */
+  --paper: #eef0e2;
+  --card: #f8f7ef;
+  --ink: #212a1c;
+  --ink-soft: #55604a;
+  --line: #cdd2ba;
+
+  --verde: #335c3d;
+  --verde-oscuro: #223f2a;
+  --cereza: #8c3239;
+  --ocre: #ad8425;
+
+  --font-display: 'Space Grotesk', sans-serif;
+  --font-body: 'Inter', sans-serif;
+
+  --radius: 10px;
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  overscroll-behavior-y: contain;
+}
+
+input, select, textarea, button {
+  font-family: inherit;
+  font-size: 16px; /* evita zoom automático en iOS/Android al enfocar */
+}
+
+button {
+  cursor: pointer;
+}
+
+::selection {
+  background: var(--ocre);
+  color: white;
+}
