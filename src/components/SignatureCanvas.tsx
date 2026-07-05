@@ -79,7 +79,7 @@ export function SignatureCanvas({ value, onChange, disabled }: Props) {
     };
   }
 
-  const startDraw = useCallback((ref: React.RefObject<HTMLCanvasElement>) =>
+  const startDraw = useCallback((ref: React.RefObject<HTMLCanvasElement | null>) =>
     (e: React.TouchEvent | React.MouseEvent) => {
       if (disabled || !ref.current) return;
       e.preventDefault();
@@ -116,7 +116,7 @@ export function SignatureCanvas({ value, onChange, disabled }: Props) {
     if (!fromModal && expandido && modalRef.current) cargarImagen(modalRef.current, b64);
   }, [expandido, onChange]);
 
-  function limpiar(ref: React.RefObject<HTMLCanvasElement>) {
+  function limpiar(ref: React.RefObject<HTMLCanvasElement | null>) {
     if (!ref.current) return;
     ref.current.getContext('2d')!.clearRect(0, 0, ref.current.width, ref.current.height);
     if (canvasRef.current)  canvasRef.current.getContext('2d')!.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
