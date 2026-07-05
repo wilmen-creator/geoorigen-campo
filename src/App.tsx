@@ -251,7 +251,6 @@ export default function App() {
       syncLineas={syncLineas}
       enLinea={enLinea}
       sesionEmail={sesionEmail}
-      onAjustes={() => setVista({ tipo: 'ajustes' })}
     />
   );
 }
