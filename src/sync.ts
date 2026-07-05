@@ -119,10 +119,32 @@ export async function sincronizarGenerico(tipo: string): Promise<ResultadoSync> 
   let errores = 0;
 
   for (const registro of pendientes as RegistroGenerico[]) {
+    // Subir fotos base64 a Supabase Storage antes de sincronizar
+    const datosConUrls = { ...registro.datos };
+    for (const [key, val] of Object.entries(datosConUrls)) {
+      if (typeof val !== 'string') continue;
+      try {
+        const arr: string[] = JSON.parse(val);
+        if (!Array.isArray(arr)) continue;
+        const urls = await Promise.all(arr.map(async (item) => {
+          if (!item.startsWith('data:')) return item; // ya es URL
+          const blob = await (await fetch(item)).blob();
+          const ext = blob.type.includes('png') ? 'png' : 'jpg';
+          const path = `${registro.tipo}/${registro.id}_${key}_${Date.now()}.${ext}`;
+          const { error: upErr } = await supabase.storage
+            .from('campo-fotos').upload(path, blob, { upsert: true });
+          if (upErr) return item; // mantener base64 si falla
+          const { data: { publicUrl } } = supabase.storage
+            .from('campo-fotos').getPublicUrl(path);
+          return publicUrl;
+        }));
+        datosConUrls[key] = JSON.stringify(urls);
+      } catch { /* no era array JSON, ignorar */ }
+    }
     const fila = {
       id: registro.id,
       tipo: registro.tipo,
-      datos: registro.datos,
+      datos: datosConUrls,
       creado_en: registro.creado_en,
       actualizado_en: registro.actualizado_en,
       colaborador_id: colaboradorId,

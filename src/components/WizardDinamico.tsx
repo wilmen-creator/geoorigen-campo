@@ -4,6 +4,8 @@ import type { FormularioDinamico, CampoDinamico } from '../generico/tipos';
 import { evaluarCondicionDinamica, evaluarFormulaDinamica } from '../generico/tipos';
 import type { RegistroGenerico } from '../generico/tipos';
 import { guardarRegistro } from '../db';
+import { SignatureCanvas } from './SignatureCanvas';
+import { PhotoCapture } from './PhotoCapture';
 
 // ── Componentes de campo individuales ────────────────────────────────────────
 
@@ -296,6 +298,32 @@ export function WizardDinamico({
                     </div>
                   )}
                   {gpsEstados[campo.key] && <p className="gps-estado">{gpsEstados[campo.key]}</p>}
+                </div>
+              );
+            }
+            if (campo.tipo === 'firma') {
+              return (
+                <div key={campo.key} className="campo ancho-completo">
+                  <span className="campo-etiqueta">✍ {campo.etiqueta}{campo.obligatorio ? ' *' : ''}</span>
+                  <SignatureCanvas
+                    value={registro.datos[campo.key] || ''}
+                    onChange={(b64) => setCampo(campo.key, b64)}
+                  />
+                </div>
+              );
+            }
+            if (campo.tipo === 'foto') {
+              const fotos: string[] = (() => {
+                try { return JSON.parse(registro.datos[campo.key] || '[]'); } catch { return []; }
+              })();
+              return (
+                <div key={campo.key} className="campo ancho-completo">
+                  <span className="campo-etiqueta">📷 {campo.etiqueta}{campo.obligatorio ? ' *' : ''}</span>
+                  <PhotoCapture
+                    value={fotos}
+                    onChange={(arr) => setCampo(campo.key, JSON.stringify(arr))}
+                    maxFotos={campo.maxFotos ?? 5}
+                  />
                 </div>
               );
             }

@@ -28,6 +28,7 @@ export interface CampoDinamico {
   obligatorio?: boolean;
   ancho?: 'completo' | 'medio';
   placeholder?: string;
+  maxFotos?: number;
   ayuda?: string;
   opciones?: OpcionCampo[];
   condicion?: CondicionDinamica | null;
