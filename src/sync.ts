@@ -112,6 +112,9 @@ export async function sincronizarGenerico(tipo: string): Promise<ResultadoSync> 
     return { ok: true, subidas: 0, errores: 0, mensaje: 'No hay registros pendientes por subir.' };
   }
 
+  const { data: { user } } = await supabase.auth.getUser();
+  const colaboradorId = user?.id ?? null;
+
   let subidas = 0;
   let errores = 0;
 
@@ -122,6 +125,7 @@ export async function sincronizarGenerico(tipo: string): Promise<ResultadoSync> 
       datos: registro.datos,
       creado_en: registro.creado_en,
       actualizado_en: registro.actualizado_en,
+      colaborador_id: colaboradorId,
     };
     const { error } = await supabase.from('registros_campo').upsert(fila, { onConflict: 'id' });
     if (error) {
