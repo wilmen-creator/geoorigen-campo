@@ -29,6 +29,14 @@ type Vista =
   | { tipo: 'form-wizard'; formulario: FormularioDinamico; registro: RegistroGenerico }
   | { tipo: 'ajustes' };
 
+export interface LineaSync {
+  icono: string;
+  nombre: string;
+  subidas: number;
+  ok: boolean;
+  mensaje: string;
+}
+
 export default function App() {
   const [vista, setVista] = useState<Vista>({ tipo: 'inicio' });
   const [encuestas, setEncuestas] = useState<Encuesta[]>([]);
@@ -37,7 +45,9 @@ export default function App() {
   const [registrosDinamicos, setRegistrosDinamicos] = useState<RegistroGenerico[]>([]);
   const [sincronizando, setSincronizando] = useState(false);
   const [mensajeSync, setMensajeSync] = useState('');
+  const [syncLineas, setSyncLineas] = useState<LineaSync[]>([]);
   const [enLinea, setEnLinea] = useState(navigator.onLine);
+  const [sesionEmail, setSesionEmail] = useState<string | null>(null);
 
   const recargarCafe = async () => setEncuestas(await listarEncuestas());
   const recargarCacao = async () => setRegistrosCacao(await listarRegistros('cacao'));
@@ -52,6 +62,14 @@ export default function App() {
 
   useEffect(() => {
     recargarTodo();
+    // Detectar sesión activa
+    import('./supabase').then(({ getSupabase }) => {
+      getSupabase().then((sb) => {
+        if (!sb) return;
+        sb.auth.getSession().then(({ data }) => setSesionEmail(data.session?.user.email ?? null));
+        sb.auth.onAuthStateChange((_, s) => setSesionEmail(s?.user.email ?? null));
+      });
+    });
     const on = () => setEnLinea(true);
     const off = () => setEnLinea(false);
     window.addEventListener('online', on);
@@ -78,14 +96,6 @@ export default function App() {
     await borrarEncuesta(id);
     recargarCafe();
   };
-  const syncCafe = async () => {
-    setSincronizando(true);
-    setMensajeSync('');
-    const r = await sincronizar();
-    setMensajeSync(r.mensaje);
-    setSincronizando(false);
-    recargarCafe();
-  };
 
   // ---------- Cacao ----------
   const abrirNuevaCacao = () => setVista({ tipo: 'cacao-wizard', registro: registroVacio('cacao') });
@@ -95,25 +105,41 @@ export default function App() {
     await borrarRegistro(id);
     recargarCacao();
   };
-  const syncCacao = async () => {
-    setSincronizando(true);
-    setMensajeSync('');
-    const r = await sincronizarGenerico('cacao');
-    setMensajeSync(r.mensaje);
-    setSincronizando(false);
-    recargarCacao();
-  };
 
   const volverAInicio = () => setVista({ tipo: 'inicio' });
 
-  // ---------- Formularios dinámicos ----------
-  const syncFormularios = async () => {
+  // ---------- Sincronización total ----------
+  const sincronizarTodo = async () => {
+    if (sincronizando) return;
     setSincronizando(true);
+    setSyncLineas([]);
     setMensajeSync('');
-    const r = await sincronizarFormularios();
-    setMensajeSync(r.mensaje);
+    const lineas: LineaSync[] = [];
+
+    // 1. Subir encuestas café pendientes
+    const rCafe = await sincronizar();
+    lineas.push({ icono: '☕', nombre: 'Línea Base Café', subidas: rCafe.subidas, ok: rCafe.ok, mensaje: rCafe.mensaje });
+
+    // 2. Subir registros cacao pendientes
+    const rCacao = await sincronizarGenerico('cacao');
+    lineas.push({ icono: esquemaCacao.icono, nombre: esquemaCacao.nombre, subidas: rCacao.subidas, ok: rCacao.ok, mensaje: rCacao.mensaje });
+
+    // 3. Subir respuestas de formularios dinámicos pendientes
+    const formsActuales = await import('./db').then(m => m.listarFormularios());
+    for (const form of formsActuales) {
+      const rForm = await sincronizarGenerico(form.id);
+      if (rForm.subidas > 0 || rForm.errores > 0) {
+        lineas.push({ icono: form.icono, nombre: form.nombre, subidas: rForm.subidas, ok: rForm.ok, mensaje: rForm.mensaje });
+      }
+    }
+
+    // 4. Descargar formularios actualizados desde Supabase
+    const rForms = await sincronizarFormularios();
+    lineas.push({ icono: '📥', nombre: 'Formularios', subidas: rForms.subidas, ok: rForms.ok, mensaje: rForms.mensaje });
+
+    await recargarTodo();
     setSincronizando(false);
-    recargarFormularios();
+    setSyncLineas(lineas);
   };
 
   if (vista.tipo === 'form-wizard') {
@@ -151,14 +177,7 @@ export default function App() {
           recargarRegistrosDinamicos(form.id);
         }}
         onVolver={volverAInicio}
-        onSincronizar={async () => {
-          setSincronizando(true);
-          setMensajeSync('');
-          const r = await sincronizarGenerico(form.id);
-          setMensajeSync(r.mensaje);
-          setSincronizando(false);
-          recargarRegistrosDinamicos(form.id);
-        }}
+        onSincronizar={sincronizarTodo}
         sincronizando={sincronizando}
         mensajeSync={mensajeSync}
         enLinea={enLinea}
@@ -191,7 +210,7 @@ export default function App() {
         onAbrir={abrirExistenteCafe}
         onNueva={abrirNuevaCafe}
         onBorrar={eliminarCafe}
-        onSincronizar={syncCafe}
+        onSincronizar={sincronizarTodo}
         onAjustes={() => setVista({ tipo: 'ajustes' })}
         onVolver={volverAInicio}
         sincronizando={sincronizando}
@@ -210,7 +229,7 @@ export default function App() {
         onNueva={abrirNuevaCacao}
         onBorrar={eliminarCacao}
         onVolver={volverAInicio}
-        onSincronizar={syncCacao}
+        onSincronizar={sincronizarTodo}
         sincronizando={sincronizando}
         mensajeSync={mensajeSync}
         enLinea={enLinea}
@@ -227,9 +246,12 @@ export default function App() {
       conteoCacao={registrosCacao.length}
       formularios={formularios}
       onFormulario={(f) => setVista({ tipo: 'form-lista', formulario: f })}
-      onSincronizarFormularios={syncFormularios}
-      sincronizandoFormularios={sincronizando}
+      onSincronizar={sincronizarTodo}
+      sincronizando={sincronizando}
+      syncLineas={syncLineas}
       enLinea={enLinea}
+      sesionEmail={sesionEmail}
+      onAjustes={() => setVista({ tipo: 'ajustes' })}
     />
   );
 }
