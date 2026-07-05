@@ -1,12 +1,13 @@
 import type { FormularioDinamico } from '../generico/tipos';
 import type { LineaSync } from '../App';
+import type { PerfilColaborador } from '../sync';
 import { esquemaCacao } from '../generico/schema-cacao';
 
 export function Inicio({
   onCafe, onCacao, onAjustes, conteoCafe, conteoCacao,
   formularios, onFormulario,
   onSincronizar, sincronizando, syncLineas,
-  enLinea, sesionEmail,
+  enLinea, sesionEmail, perfil,
 }: {
   onCafe: () => void;
   onCacao: () => void;
@@ -20,6 +21,7 @@ export function Inicio({
   syncLineas: LineaSync[];
   enLinea: boolean;
   sesionEmail: string | null;
+  perfil: PerfilColaborador | null;
 }) {
   return (
     <div className="lista-contenedor">
@@ -103,17 +105,22 @@ export function Inicio({
 
       {/* Tarjetas de módulos */}
       <div className="tarjetas-inicio">
-        <button className="tarjeta-modulo" onClick={onCafe}>
-          <span className="tarjeta-modulo-icono">☕</span>
-          <span className="tarjeta-modulo-nombre">Línea Base Café</span>
-          <span className="tarjeta-modulo-conteo">{conteoCafe} registro(s)</span>
-        </button>
+        {/* perfil null = admin → acceso total; perfil.acceso_cafe = true → mostrar */}
+        {(perfil === null || perfil.acceso_cafe) && (
+          <button className="tarjeta-modulo" onClick={onCafe}>
+            <span className="tarjeta-modulo-icono">☕</span>
+            <span className="tarjeta-modulo-nombre">Línea Base Café</span>
+            <span className="tarjeta-modulo-conteo">{conteoCafe} registro(s)</span>
+          </button>
+        )}
 
-        <button className="tarjeta-modulo" onClick={onCacao}>
-          <span className="tarjeta-modulo-icono">{esquemaCacao.icono}</span>
-          <span className="tarjeta-modulo-nombre">{esquemaCacao.nombre}</span>
-          <span className="tarjeta-modulo-conteo">{conteoCacao} registro(s)</span>
-        </button>
+        {(perfil === null || perfil.acceso_cacao) && (
+          <button className="tarjeta-modulo" onClick={onCacao}>
+            <span className="tarjeta-modulo-icono">{esquemaCacao.icono}</span>
+            <span className="tarjeta-modulo-nombre">{esquemaCacao.nombre}</span>
+            <span className="tarjeta-modulo-conteo">{conteoCacao} registro(s)</span>
+          </button>
+        )}
 
         {formularios.map((f) => (
           <button key={f.id} className="tarjeta-modulo" onClick={() => onFormulario(f)}>

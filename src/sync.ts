@@ -141,6 +141,27 @@ export async function sincronizarGenerico(tipo: string): Promise<ResultadoSync> 
   return { ok, subidas, errores, mensaje };
 }
 
+// ---------- Descarga de perfil del colaborador (acceso a módulos) ----------
+
+export interface PerfilColaborador {
+  acceso_cafe: boolean;
+  acceso_cacao: boolean;
+}
+
+export async function sincronizarPerfil(): Promise<PerfilColaborador | null> {
+  const supabase = await getSupabase();
+  if (!supabase || !navigator.onLine) return null;
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data } = await supabase
+    .from('colaboradores_campo')
+    .select('acceso_cafe, acceso_cacao')
+    .eq('user_id', user.id)
+    .maybeSingle();
+  // Si no hay fila (es admin), null → acceso total
+  return data ? { acceso_cafe: data.acceso_cafe, acceso_cacao: data.acceso_cacao } : null;
+}
+
 // ---------- Descarga de formularios dinámicos desde Supabase ----------
 // Solo descarga, nunca sube (los schemas se crean desde el admin web).
 

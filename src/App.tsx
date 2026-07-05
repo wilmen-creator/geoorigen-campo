@@ -10,7 +10,8 @@ import {
   listarEncuestas, borrarEncuesta, listarRegistros, borrarRegistro,
   listarFormularios,
 } from './db';
-import { sincronizar, sincronizarGenerico, sincronizarFormularios } from './sync';
+import { sincronizar, sincronizarGenerico, sincronizarFormularios, sincronizarPerfil } from './sync';
+import type { PerfilColaborador } from './sync';
 import { Inicio } from './components/Inicio';
 import { ListaEncuestas } from './components/ListaEncuestas';
 import { ListaGenerica } from './components/ListaGenerica';
@@ -48,6 +49,7 @@ export default function App() {
   const [syncLineas, setSyncLineas] = useState<LineaSync[]>([]);
   const [enLinea, setEnLinea] = useState(navigator.onLine);
   const [sesionEmail, setSesionEmail] = useState<string | null>(null);
+  const [perfil, setPerfil] = useState<PerfilColaborador | null>(null);
 
   const recargarCafe = async () => setEncuestas(await listarEncuestas());
   const recargarCacao = async () => setRegistrosCacao(await listarRegistros('cacao'));
@@ -136,6 +138,10 @@ export default function App() {
     // 4. Descargar formularios actualizados desde Supabase
     const rForms = await sincronizarFormularios();
     lineas.push({ icono: '📥', nombre: 'Formularios', subidas: rForms.subidas, ok: rForms.ok, mensaje: rForms.mensaje });
+
+    // 5. Descargar perfil del colaborador (acceso a módulos)
+    const perfilActual = await sincronizarPerfil();
+    setPerfil(perfilActual);
 
     await recargarTodo();
     setSincronizando(false);
@@ -251,6 +257,7 @@ export default function App() {
       syncLineas={syncLineas}
       enLinea={enLinea}
       sesionEmail={sesionEmail}
+      perfil={perfil}
     />
   );
 }
