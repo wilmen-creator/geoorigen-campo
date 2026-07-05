@@ -209,9 +209,12 @@ export async function sincronizarFormularios(): Promise<ResultadoSync> {
     return { ok: false, subidas: 0, errores: 1, mensaje: `Error al descargar formularios: ${error.message}` };
   }
 
-  // Borrar todos los formularios locales y reemplazar con los del servidor
-  // (así los desasignados desaparecen al sincronizar)
-  await db.formularios.clear();
+  // Eliminar del local los que ya no vienen del servidor (desasignados o desactivados)
+  const idsServidor = new Set((data || []).map((f: any) => f.id));
+  const locales = await db.formularios.toArray();
+  for (const f of locales) {
+    if (!idsServidor.has(f.id)) await db.formularios.delete(f.id);
+  }
   let descargados = 0;
   for (const form of (data || []) as FormularioDinamico[]) {
     await guardarFormulario(form);
