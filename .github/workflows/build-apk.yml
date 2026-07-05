@@ -1,0 +1,52 @@
+name: Build APK
+
+on:
+  push:
+    branches: [master, main]
+  workflow_dispatch:   # permite lanzarlo manualmente desde GitHub Actions
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web app
+        run: npm run build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      - name: Make gradlew executable
+        run: chmod +x android/gradlew
+
+      - name: Build debug APK
+        run: ./gradlew assembleDebug
+        working-directory: android
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeoOrigen-Campo-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
