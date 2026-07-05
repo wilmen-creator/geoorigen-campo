@@ -71,8 +71,8 @@ export async function guardarFormulario(form: FormularioDinamico) {
 }
 
 export async function listarFormularios() {
-  const todos = await db.formularios.where('activo').equals(1).toArray();
-  return todos.sort((a, b) => a.nombre.localeCompare(b.nombre));
+  const todos = await db.formularios.toArray();
+  return todos.filter(f => f.activo).sort((a, b) => a.nombre.localeCompare(b.nombre));
 }
 
 export async function obtenerFormulario(id: string) {
