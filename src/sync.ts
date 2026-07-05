@@ -176,7 +176,7 @@ export async function sincronizarFormularios(): Promise<ResultadoSync> {
 
   const { data, error } = await supabase
     .from('formularios')
-    .select('id, nombre, descripcion, icono, activo, version, schema, updated_at')
+    .select('id, nombre, descripcion, icono, activo, version, schema, tipo_sistema, updated_at')
     .eq('activo', true);
 
   if (error) {

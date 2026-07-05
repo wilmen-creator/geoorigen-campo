@@ -60,6 +60,7 @@ export interface FormularioDinamico {
   activo: boolean;
   version: number;
   schema: SchemaDinamico;
+  tipo_sistema?: string; // 'cafe' | 'cacao' | undefined (dinámico)
   updated_at: string;
 }
 

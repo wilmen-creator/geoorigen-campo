@@ -1,27 +1,21 @@
 import type { FormularioDinamico } from '../generico/tipos';
 import type { LineaSync } from '../App';
-import type { PerfilColaborador } from '../sync';
-import { esquemaCacao } from '../generico/schema-cacao';
 
 export function Inicio({
-  onCafe, onCacao, onAjustes, conteoCafe, conteoCacao,
-  formularios, onFormulario,
-  onSincronizar, sincronizando, syncLineas,
-  enLinea, sesionEmail, perfil,
+  onAjustes, formularios, conteoCafe, conteoCacao,
+  onFormulario, onSincronizar, sincronizando, syncLineas,
+  enLinea, sesionEmail,
 }: {
-  onCafe: () => void;
-  onCacao: () => void;
   onAjustes: () => void;
+  formularios: FormularioDinamico[];
   conteoCafe: number;
   conteoCacao: number;
-  formularios: FormularioDinamico[];
   onFormulario: (f: FormularioDinamico) => void;
   onSincronizar: () => void;
   sincronizando: boolean;
   syncLineas: LineaSync[];
   enLinea: boolean;
   sesionEmail: string | null;
-  perfil: PerfilColaborador | null;
 }) {
   return (
     <div className="lista-contenedor">
@@ -90,50 +84,36 @@ export function Inicio({
           {syncLineas.map((l, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
               <span style={{ fontSize: '0.875rem', width: '20px', textAlign: 'center' }}>{l.icono}</span>
-              <span style={{ fontSize: '0.75rem', color: '#15803d', flex: 1 }}>
-                {l.nombre}
-              </span>
+              <span style={{ fontSize: '0.75rem', color: '#15803d', flex: 1 }}>{l.nombre}</span>
               <span style={{ fontSize: '0.75rem', color: l.ok ? '#166534' : '#dc2626', fontWeight: 500 }}>
-                {l.ok
-                  ? l.subidas > 0 ? `↑ ${l.subidas}` : '✓'
-                  : '✗ error'}
+                {l.ok ? (l.subidas > 0 ? `↑ ${l.subidas}` : '✓') : '✗ error'}
               </span>
             </div>
           ))}
         </div>
       )}
 
-      {/* Tarjetas de módulos */}
+      {/* Tarjetas unificadas de formularios */}
       <div className="tarjetas-inicio">
-        {/* perfil null = admin → acceso total; perfil.acceso_cafe = true → mostrar */}
-        {(perfil === null || perfil.acceso_cafe) && (
-          <button className="tarjeta-modulo" onClick={onCafe}>
-            <span className="tarjeta-modulo-icono">☕</span>
-            <span className="tarjeta-modulo-nombre">Línea Base Café</span>
-            <span className="tarjeta-modulo-conteo">{conteoCafe} registro(s)</span>
-          </button>
-        )}
-
-        {(perfil === null || perfil.acceso_cacao) && (
-          <button className="tarjeta-modulo" onClick={onCacao}>
-            <span className="tarjeta-modulo-icono">{esquemaCacao.icono}</span>
-            <span className="tarjeta-modulo-nombre">{esquemaCacao.nombre}</span>
-            <span className="tarjeta-modulo-conteo">{conteoCacao} registro(s)</span>
-          </button>
-        )}
-
-        {formularios.map((f) => (
-          <button key={f.id} className="tarjeta-modulo" onClick={() => onFormulario(f)}>
-            <span className="tarjeta-modulo-icono">{f.icono || '📋'}</span>
-            <span className="tarjeta-modulo-nombre">{f.nombre}</span>
-            <span className="tarjeta-modulo-conteo">v{f.version}</span>
-          </button>
-        ))}
+        {formularios.map((f) => {
+          const conteo = f.tipo_sistema === 'cafe'
+            ? `${conteoCafe} registro(s)`
+            : f.tipo_sistema === 'cacao'
+            ? `${conteoCacao} registro(s)`
+            : `v${f.version}`;
+          return (
+            <button key={f.id} className="tarjeta-modulo" onClick={() => onFormulario(f)}>
+              <span className="tarjeta-modulo-icono">{f.icono || '📋'}</span>
+              <span className="tarjeta-modulo-nombre">{f.nombre}</span>
+              <span className="tarjeta-modulo-conteo">{conteo}</span>
+            </button>
+          );
+        })}
       </div>
 
       {formularios.length === 0 && sesionEmail && enLinea && !sincronizando && (
         <p style={{ textAlign: 'center', fontSize: '0.75rem', color: '#9ca3af', marginTop: '16px' }}>
-          Sincroniza para ver los formularios asignados
+          Toca "Sincronizar todo" para ver los formularios asignados
         </p>
       )}
     </div>
