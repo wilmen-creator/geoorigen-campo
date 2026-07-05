@@ -1,21 +1,26 @@
 import Dexie, { type Table } from 'dexie';
 import type { Encuesta } from './types';
-import type { RegistroGenerico } from './generico/tipos';
+import type { RegistroGenerico, FormularioDinamico } from './generico/tipos';
 
 class GeoOrigenDB extends Dexie {
   encuestas!: Table<Encuesta, string>;
   registros!: Table<RegistroGenerico, string>;
+  formularios!: Table<FormularioDinamico, string>;
 
   constructor() {
     super('geoorigen_campo_db');
     this.version(1).stores({
-      // 'id' como clave primaria, índices para listar/filtrar rápido
       encuestas: 'id, dni, nombre, finca, sincronizado, actualizado_en',
     });
     this.version(2).stores({
       encuestas: 'id, dni, nombre, finca, sincronizado, actualizado_en',
-      // registros genéricos: cacao y futuros cultivos, por esquema
       registros: 'id, tipo, sincronizado, actualizado_en',
+    });
+    this.version(3).stores({
+      encuestas: 'id, dni, nombre, finca, sincronizado, actualizado_en',
+      registros: 'id, tipo, sincronizado, actualizado_en',
+      // Schemas de formularios descargados desde Supabase
+      formularios: 'id, nombre, activo, version, updated_at',
     });
   }
 }
@@ -57,4 +62,19 @@ export async function borrarRegistro(id: string) {
 
 export async function obtenerPendientesGenericos(tipo: string) {
   return db.registros.where('tipo').equals(tipo).filter((r) => !r.sincronizado).toArray();
+}
+
+// ---------- Formularios dinámicos (schemas descargados de Supabase) ----------
+
+export async function guardarFormulario(form: FormularioDinamico) {
+  await db.formularios.put(form);
+}
+
+export async function listarFormularios() {
+  const todos = await db.formularios.where('activo').equals(1).toArray();
+  return todos.sort((a, b) => a.nombre.localeCompare(b.nombre));
+}
+
+export async function obtenerFormulario(id: string) {
+  return db.formularios.get(id);
 }

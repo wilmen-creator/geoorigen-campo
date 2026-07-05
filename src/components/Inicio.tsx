@@ -1,13 +1,20 @@
 import { esquemaCacao } from '../generico/schema-cacao';
+import type { FormularioDinamico } from '../generico/tipos';
 
 export function Inicio({
   onCafe, onCacao, onAjustes, conteoCafe, conteoCacao,
+  formularios, onFormulario, onSincronizarFormularios, sincronizandoFormularios, enLinea,
 }: {
   onCafe: () => void;
   onCacao: () => void;
   onAjustes: () => void;
   conteoCafe: number;
   conteoCacao: number;
+  formularios: FormularioDinamico[];
+  onFormulario: (f: FormularioDinamico) => void;
+  onSincronizarFormularios: () => void;
+  sincronizandoFormularios: boolean;
+  enLinea: boolean;
 }) {
   return (
     <div className="lista-contenedor">
@@ -31,6 +38,31 @@ export function Inicio({
           <span className="tarjeta-modulo-nombre">{esquemaCacao.nombre}</span>
           <span className="tarjeta-modulo-conteo">{conteoCacao} registro(s)</span>
         </button>
+
+        {formularios.map((f) => (
+          <button key={f.id} className="tarjeta-modulo" onClick={() => onFormulario(f)}>
+            <span className="tarjeta-modulo-icono">{f.icono || '📋'}</span>
+            <span className="tarjeta-modulo-nombre">{f.nombre}</span>
+            <span className="tarjeta-modulo-conteo">v{f.version}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Botón para descargar formularios */}
+      <div style={{ marginTop: '24px', textAlign: 'center' }}>
+        <button
+          className="btn-secundario"
+          onClick={onSincronizarFormularios}
+          disabled={sincronizandoFormularios || !enLinea}
+          style={{ fontSize: '0.875rem' }}
+        >
+          {sincronizandoFormularios ? '⟳ Actualizando formularios...' : '⬇ Actualizar formularios'}
+        </button>
+        {!enLinea && (
+          <p style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '6px' }}>
+            Sin conexión — usando formularios guardados
+          </p>
+        )}
       </div>
     </div>
   );

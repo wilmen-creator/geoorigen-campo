@@ -1,7 +1,7 @@
 import { getSupabase } from './supabase';
-import { db, guardarEncuesta, guardarRegistro } from './db';
+import { db, guardarEncuesta, guardarRegistro, guardarFormulario } from './db';
 import type { Encuesta } from './types';
-import type { RegistroGenerico } from './generico/tipos';
+import type { RegistroGenerico, FormularioDinamico } from './generico/tipos';
 
 export interface ResultadoSync {
   ok: boolean;
@@ -139,4 +139,44 @@ export async function sincronizarGenerico(tipo: string): Promise<ResultadoSync> 
     : `${subidas} subida(s), ${errores} con error. Revisa la conexión e intenta de nuevo.`;
 
   return { ok, subidas, errores, mensaje };
+}
+
+// ---------- Descarga de formularios dinámicos desde Supabase ----------
+// Solo descarga, nunca sube (los schemas se crean desde el admin web).
+
+export async function sincronizarFormularios(): Promise<ResultadoSync> {
+  const supabase = await getSupabase();
+  if (!supabase) {
+    return { ok: false, subidas: 0, errores: 0, mensaje: 'Falta configurar la conexión a Supabase (ver Ajustes).' };
+  }
+  if (!navigator.onLine) {
+    return { ok: false, subidas: 0, errores: 0, mensaje: 'Sin conexión a internet en este momento.' };
+  }
+
+  const { data, error } = await supabase
+    .from('formularios')
+    .select('id, nombre, descripcion, icono, activo, version, schema, updated_at')
+    .eq('activo', true);
+
+  if (error) {
+    return { ok: false, subidas: 0, errores: 1, mensaje: `Error al descargar formularios: ${error.message}` };
+  }
+
+  let descargados = 0;
+  for (const form of (data || []) as FormularioDinamico[]) {
+    await guardarFormulario(form);
+    descargados++;
+  }
+
+  return {
+    ok: true, subidas: descargados, errores: 0,
+    mensaje: `${descargados} formulario(s) actualizados.`,
+  };
+}
+
+// ---------- Subida de respuestas de formularios dinámicos ----------
+// Usa la misma tabla registros_campo que cacao, con tipo = formulario.id
+
+export async function sincronizarFormularioDinamico(tipo: string): Promise<ResultadoSync> {
+  return sincronizarGenerico(tipo);
 }
