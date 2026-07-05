@@ -10,7 +10,7 @@ function Canvas({
   canvasRef, onStart, onMove, onEnd, disabled,
   width, height, style,
 }: {
-  canvasRef: React.RefObject<HTMLCanvasElement>;
+  canvasRef: React.RefObject<HTMLCanvasElement | null>;
   onStart: (e: React.TouchEvent | React.MouseEvent) => void;
   onMove:  (e: React.TouchEvent | React.MouseEvent) => void;
   onEnd:   () => void;
