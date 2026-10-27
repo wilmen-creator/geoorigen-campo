@@ -72,9 +72,14 @@ export function ProveedorSesion({ children }: { children: ReactNode }) {
       await cargarMembresias(data.session);
       setCargando(false);
     });
+    let usuarioCargado: string | undefined;
     const { data: sub } = supabase.auth.onAuthStateChange((evento, s) => {
       if (evento === 'PASSWORD_RECOVERY') setRecuperando(true);
       setSesion(s);
+      // Supabase avisa también al recuperar el foco o renovar el token:
+      // solo se recargan las organizaciones si cambió el usuario.
+      if (s?.user.id === usuarioCargado) return;
+      usuarioCargado = s?.user.id;
       // Fuera del callback para no bloquear el cliente de auth
       setTimeout(() => { cargarMembresias(s); }, 0);
     });
