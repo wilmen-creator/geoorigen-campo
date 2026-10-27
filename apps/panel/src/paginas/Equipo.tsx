@@ -195,31 +195,55 @@ function CambiarClave({ orgId, miembro, onListo, onCerrar }: {
 
 // ── Formularios asignados ─────────────────────────────────────────────────────
 
-function Asignaciones({ miembro, formularios, onCerrar }: {
-  miembro: Miembro; formularios: FormularioCorto[]; onCerrar: () => void;
+function Asignaciones({ miembro, formularios, onListo, onCerrar }: {
+  miembro: Miembro; formularios: FormularioCorto[]; onListo: (aviso: string) => void; onCerrar: () => void;
 }) {
+  // Lo que hay guardado y lo que se está marcando; solo se guarda al tocar el botón
+  const [guardados, setGuardados] = useState<Set<string>>(new Set());
   const [marcados, setMarcados] = useState<Set<string>>(new Set());
   const [conAsignacion, setConAsignacion] = useState<Set<string>>(new Set());
   const [error, setError] = useState('');
+  const [guardando, setGuardando] = useState(false);
 
-  const cargar = useCallback(async () => {
+  useEffect(() => {
     const ids = formularios.map((f) => f.id);
     if (ids.length === 0) return;
-    const { data } = await supabase.from('formulario_asignaciones').select('formulario_id, user_id').in('formulario_id', ids);
-    const filas = data ?? [];
-    setMarcados(new Set(filas.filter((f) => f.user_id === miembro.user_id).map((f) => f.formulario_id)));
-    setConAsignacion(new Set(filas.map((f) => f.formulario_id)));
+    supabase.from('formulario_asignaciones').select('formulario_id, user_id').in('formulario_id', ids)
+      .then(({ data }) => {
+        const filas = data ?? [];
+        const mios = new Set(filas.filter((f) => f.user_id === miembro.user_id).map((f) => f.formulario_id));
+        setGuardados(mios);
+        setMarcados(new Set(mios));
+        setConAsignacion(new Set(filas.map((f) => f.formulario_id)));
+      });
   }, [formularios, miembro.user_id]);
 
-  useEffect(() => { cargar(); }, [cargar]);
+  const alternar = (formId: string) => setMarcados((m) => {
+    const copia = new Set(m);
+    if (copia.has(formId)) copia.delete(formId); else copia.add(formId);
+    return copia;
+  });
 
-  const alternar = async (formId: string) => {
+  const agregar = [...marcados].filter((id) => !guardados.has(id));
+  const quitar = [...guardados].filter((id) => !marcados.has(id));
+  const hayCambios = agregar.length + quitar.length > 0;
+
+  const guardar = async () => {
+    setGuardando(true);
     setError('');
-    const { error: err } = marcados.has(formId)
-      ? await supabase.from('formulario_asignaciones').delete().eq('formulario_id', formId).eq('user_id', miembro.user_id)
-      : await supabase.from('formulario_asignaciones').insert({ formulario_id: formId, user_id: miembro.user_id });
+    const r1 = agregar.length
+      ? await supabase.from('formulario_asignaciones').insert(agregar.map((formulario_id) => ({ formulario_id, user_id: miembro.user_id })))
+      : { error: null };
+    const r2 = quitar.length
+      ? await supabase.from('formulario_asignaciones').delete().eq('user_id', miembro.user_id).in('formulario_id', quitar)
+      : { error: null };
+    setGuardando(false);
+    const err = r1.error ?? r2.error;
     if (err) return setError(mensajeError(err));
-    await cargar();
+    const nombre = miembro.nombre || miembro.email;
+    onListo(marcados.size === 0
+      ? `${nombre} no tiene formularios asignados: verá los que no están asignados a nadie.`
+      : `Asignaciones guardadas: ${nombre} tiene ${marcados.size} formulario(s).`);
   };
 
   return (
@@ -235,12 +259,19 @@ function Asignaciones({ miembro, formularios, onCerrar }: {
             <input type="checkbox" className="accent-primary" checked={marcados.has(f.id)} onChange={() => alternar(f.id)} />
             <span className="text-lg">{f.icono}</span>
             <span className="flex-1 text-sm">{f.nombre}</span>
+            {marcados.has(f.id) !== guardados.has(f.id) && <span className="badge bg-amber-50 text-amber-700">sin guardar</span>}
             {!conAsignacion.has(f.id) && <span className="badge bg-gray-100 text-gray-500">todos lo ven</span>}
             {!f.activo && <span className="badge bg-gray-100 text-gray-500">inactivo</span>}
           </label>
         ))}
       </div>
       {error && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      <div className="mt-4 flex justify-end gap-2">
+        <button className="btn-secondary" onClick={onCerrar}>Cancelar</button>
+        <button className="btn-primary" onClick={guardar} disabled={guardando || !hayCambios}>
+          {guardando ? 'Guardando…' : 'Guardar asignaciones'}
+        </button>
+      </div>
     </Modal>
   );
 }
@@ -443,7 +474,7 @@ export function Equipo() {
       {modal?.tipo === 'invitar' && org && <Invitar orgId={org.org_id} onListo={listo} onCerrar={() => setModal(null)} />}
       {modal?.tipo === 'clave' && org && <CambiarClave orgId={org.org_id} miembro={modal.m} onListo={listo} onCerrar={() => setModal(null)} />}
       {modal?.tipo === 'asignar' && (
-        <Asignaciones miembro={modal.m} formularios={formularios} onCerrar={() => { setModal(null); cargar(); }} />
+        <Asignaciones miembro={modal.m} formularios={formularios} onListo={listo} onCerrar={() => setModal(null)} />
       )}
     </div>
   );
