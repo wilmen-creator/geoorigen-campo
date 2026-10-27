@@ -160,3 +160,44 @@ describe('campos calculados', () => {
     expect((original.lotes as Valores[])[0].densidad).toBeUndefined();
   });
 });
+
+import { revisarEsquema } from '../src/index.ts';
+
+describe('revisión del esquema antes de publicar', () => {
+  it('el esquema de ejemplo no tiene problemas graves', () => {
+    expect(revisarEsquema(esquema).filter((p) => p.grave)).toEqual([]);
+  });
+
+  it('detecta claves repetidas, fórmulas rotas y referencias inexistentes', () => {
+    const malo: Esquema = {
+      version: 2, claveNombre: 'no_existe',
+      secciones: [{
+        id: 's1', titulo: 'S1',
+        campos: [
+          { key: 'a', etiqueta: 'A', tipo: 'texto' },
+          { key: 'a', etiqueta: 'A otra vez', tipo: 'texto' },
+          { key: 'calc', etiqueta: 'Calc', tipo: 'calculado', formula: 'SUMA({a}, {fantasma})' },
+          { key: 'roto', etiqueta: 'Roto', tipo: 'calculado', formula: 'alert(1)' },
+          { key: 'lista', etiqueta: 'Lista', tipo: 'select', opciones: [] },
+          { key: 'cond', etiqueta: 'Cond', tipo: 'texto',
+            condicion: { logica: 'y', reglas: [{ campo: 'nadie', operador: 'igual', valor: 'x' }] } },
+          { key: 'grupo', etiqueta: 'Grupo', tipo: 'repetible', campos: [] },
+          { key: 'Mal Clave', etiqueta: 'Mal', tipo: 'texto' },
+        ],
+      }],
+    };
+    const mensajes = revisarEsquema(malo).filter((p) => p.grave).map((p) => p.mensaje).join('\n');
+    expect(mensajes).toMatch(/"a" está repetida/);
+    expect(mensajes).toMatch(/\{fantasma\}/);
+    expect(mensajes).toMatch(/Roto.*error/);
+    expect(mensajes).toMatch(/Lista" no tiene opciones/);
+    expect(mensajes).toMatch(/usa "nadie"/);
+    expect(mensajes).toMatch(/Grupo" no tiene campos/);
+    expect(mensajes).toMatch(/Mal.*minúsculas/);
+    expect(mensajes).toMatch(/título "no_existe"/);
+  });
+
+  it('dentro de un repetible acepta referencias a la misma fila y a columnas', () => {
+    expect(revisarEsquema(esquema).some((p) => p.campo === 'lotes.densidad')).toBe(false);
+  });
+});

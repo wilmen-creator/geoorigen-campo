@@ -1,0 +1,50 @@
+@import 'tailwindcss';
+
+/* Paleta de GeoOrigen (la misma del dashboard) */
+@theme {
+  --color-primary: #0f6e56;
+  --color-primary-mid: #1d9e75;
+  --color-primary-light: #d6f0e8;
+  --color-accent: #854f0b;
+  --color-geo-text: #2c2c2a;
+  --color-geo-gray: #f0efec;
+  --font-sans: 'DM Sans', 'Inter', system-ui, sans-serif;
+}
+
+@layer base {
+  html, body, #root { height: 100%; }
+  body { @apply bg-geo-gray text-geo-text antialiased; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--color-geo-gray); }
+  ::-webkit-scrollbar-thumb { background: var(--color-primary-mid); border-radius: 3px; }
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white
+           transition-colors hover:bg-primary-mid disabled:cursor-not-allowed disabled:opacity-50
+           focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium
+           text-geo-text transition-colors hover:bg-geo-gray disabled:cursor-not-allowed disabled:opacity-50
+           focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2;
+  }
+  .btn-icon {
+    @apply inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-400 transition-colors
+           hover:bg-white hover:text-geo-text disabled:opacity-25;
+  }
+  .card {
+    @apply rounded-xl border border-gray-100 bg-white p-4 shadow-sm;
+  }
+  .input {
+    @apply w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm placeholder-gray-400
+           focus:border-transparent focus:outline-none focus:ring-2 focus:ring-primary;
+  }
+  .label {
+    @apply mb-1 block text-xs font-medium tracking-wide text-gray-500 uppercase;
+  }
+  .badge {
+    @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium;
+  }
+}

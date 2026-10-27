@@ -6,3 +6,4 @@ export {
 export { evaluarCondicion, evaluarRegla, seccionesVisibles, camposVisibles, esVacio } from './condiciones.ts';
 export { validarRegistro, type ErrorValidacion } from './validaciones.ts';
 export { calcularDerivados } from './calculos.ts';
+export { revisarEsquema, type Problema } from './revision.ts';
