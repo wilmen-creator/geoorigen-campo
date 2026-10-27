@@ -2,10 +2,9 @@
 -- GeoOrigen Campo — 04 · Control de veracidad, búsqueda y acceso de emergencia
 --
 -- 1. Evidencia de captura: GPS automático al abrir y al enviar la encuesta,
---    precisión, ubicación simulada y dispositivo. Inmutable una vez guardada.
--- 2. Control para revisión: distancia a la finca, tiempo de llenado y alertas.
---    NUNCA bloquea al técnico: solo marca para que el admin revise.
---    Vive en una tabla aparte que el colaborador no puede leer.
+--    precisión, ubicación simulada y tiempo de llenado. Inmutable una vez guardada.
+-- 2. Alertas automáticas por registro (lejos de la finca, GPS impreciso,
+--    ubicación simulada, llenado rápido, varias fincas desde el mismo punto).
 -- 3. Origen de cada foto (cámara o galería) con sus datos EXIF.
 -- 4. Búsqueda rápida por cédula, nombre, finca… en todo el registro.
 -- 5. Acceso de emergencia de GeoOrigen a una organización: solo lectura,
@@ -25,102 +24,71 @@ alter table public.registros
   add column captura_fin_en            timestamptz,
   add column ubicacion_simulada        boolean not null default false,
   add column dispositivo               jsonb not null default '{}'::jsonb,  -- modelo, sistema, versión de la app
-  add column texto_busqueda            text not null default '';            -- lo llena el servidor
+  -- Calculados por el servidor (nadie los escribe directamente)
+  add column distancia_finca_m         real,
+  add column duracion_s                integer,
+  add column alertas                   text[] not null default '{}',
+  add column texto_busqueda            text not null default '';
+
+-- Umbrales configurables por formulario
+alter table public.formularios
+  add column umbral_distancia_m  integer not null default 300,
+  add column duracion_minima_s   integer not null default 0;   -- 0 = no revisar
 
 create index registros_captura_geom_idx on public.registros using gist (captura_inicio_geom);
+create index registros_alertas_idx      on public.registros using gin (alertas);
 create index registros_datos_idx        on public.registros using gin (datos jsonb_path_ops);
 create index registros_busqueda_idx     on public.registros using gin (texto_busqueda extensions.gin_trgm_ops);
 create index registros_org_creado_idx   on public.registros (org_id, creado_en desc);
 
-grant insert (captura_inicio_geom, captura_inicio_precision, captura_inicio_en,
-              captura_fin_geom, captura_fin_precision, captura_fin_en,
-              ubicacion_simulada, dispositivo)
-  on public.registros to authenticated;
-grant update (captura_inicio_geom, captura_inicio_precision, captura_inicio_en,
-              captura_fin_geom, captura_fin_precision, captura_fin_en,
-              ubicacion_simulada, dispositivo)
-  on public.registros to authenticated;
+-- ── 3. Origen de las fotos ────────────────────────────────────────────────────
+alter table public.archivos
+  add column origen      text not null default 'camara' check (origen in ('camara', 'galeria', 'firma')),
+  add column tomada_en   timestamptz,        -- hora de la toma (cámara) o fecha EXIF (galería)
+  add column precision   real,               -- precisión del GPS de la toma, en metros
+  add column exif        jsonb not null default '{}'::jsonb;  -- fecha y GPS originales del archivo
 
--- Antes de guardar: la evidencia no se puede cambiar y se arma el texto de búsqueda
+-- ── 2. Cálculo de evidencia, alertas y texto de búsqueda ──────────────────────
+-- Corre después de los triggers de alta y edición (los triggers van por nombre).
 create or replace function app.registro_evidencia()
 returns trigger language plpgsql security definer set search_path = '' as $$
+declare
+  v_umbral  integer;
+  v_minimo  integer;
+  v_alertas text[] := '{}';
 begin
+  -- La evidencia no se puede cambiar una vez guardada (ni el colaborador ni un admin)
   if tg_op = 'UPDATE' then
-    if (old.captura_inicio_geom is not null
-          and (new.captura_inicio_geom is null or not extensions.st_equals(new.captura_inicio_geom, old.captura_inicio_geom)))
-       or (old.captura_inicio_en is not null and new.captura_inicio_en is distinct from old.captura_inicio_en)
-       or (old.captura_inicio_precision is not null and new.captura_inicio_precision is distinct from old.captura_inicio_precision)
-       or (old.captura_fin_geom is not null
-          and (new.captura_fin_geom is null or not extensions.st_equals(new.captura_fin_geom, old.captura_fin_geom)))
-       or (old.captura_fin_en is not null and new.captura_fin_en is distinct from old.captura_fin_en)
-       or (old.captura_fin_precision is not null and new.captura_fin_precision is distinct from old.captura_fin_precision)
+    if (old.captura_inicio_geom is not null and not extensions.st_equals(new.captura_inicio_geom, old.captura_inicio_geom))
+       or (old.captura_inicio_geom is not null and new.captura_inicio_geom is null)
+       or old.captura_inicio_en is distinct from new.captura_inicio_en and old.captura_inicio_en is not null
+       or old.captura_inicio_precision is distinct from new.captura_inicio_precision and old.captura_inicio_precision is not null
+       or (old.captura_fin_geom is not null and (new.captura_fin_geom is null or not extensions.st_equals(new.captura_fin_geom, old.captura_fin_geom)))
+       or old.captura_fin_en is distinct from new.captura_fin_en and old.captura_fin_en is not null
+       or old.captura_fin_precision is distinct from new.captura_fin_precision and old.captura_fin_precision is not null
        or (old.ubicacion_simulada and not new.ubicacion_simulada)
        or (old.dispositivo <> '{}'::jsonb and new.dispositivo is distinct from old.dispositivo) then
-      raise exception 'La evidencia de captura no se puede modificar';
+      raise exception 'La evidencia de captura (GPS, hora, dispositivo) no se puede modificar';
     end if;
   end if;
 
-  -- Todos los textos del registro, sin tildes y en minúscula
-  new.texto_busqueda := coalesce((
-    select lower(extensions.unaccent('extensions.unaccent'::regdictionary, string_agg(t #>> '{}', ' ')))
-    from jsonb_path_query(new.datos, 'strict $.** ? (@.type() == "string")') as t
-  ), '');
-  return new;
-end;
-$$;
-
--- El nombre hace que corra después de registros_al_insertar / registros_al_actualizar
-create trigger registros_evidencia
-  before insert or update on public.registros
-  for each row execute function app.registro_evidencia();
-
--- ── 2. Control para revisión (oculto para el técnico) ─────────────────────────
--- Umbrales por formulario: solo deciden qué se MARCA para revisar, nunca bloquean.
-alter table public.formularios
-  add column umbral_distancia_m  integer not null default 300,  -- 0 = no marcar distancia
-  add column duracion_minima_s   integer not null default 0;    -- 0 = no marcar tiempo
-
-grant insert (umbral_distancia_m, duracion_minima_s) on public.formularios to authenticated;
-grant update (umbral_distancia_m, duracion_minima_s) on public.formularios to authenticated;
-
-create table public.registros_control (
-  registro_id        uuid primary key references public.registros(id) on delete cascade,
-  org_id             uuid not null references public.organizaciones(id) on delete cascade,
-  distancia_finca_m  real,       -- de donde se hizo la encuesta a la ubicación de la finca
-  duracion_s         integer,    -- de abrir a enviar, según la hora del GPS
-  alertas            text[] not null default '{}',
-  calculado_en       timestamptz not null default now()
-);
-create index registros_control_alertas_idx on public.registros_control using gin (alertas);
-create index registros_control_org_idx on public.registros_control (org_id);
-
-alter table public.registros_control enable row level security;
-grant select on public.registros_control to authenticated;
-
--- Solo quien revisa: admin, editor y lector. El colaborador no tiene ninguna política.
-create policy control_ver on public.registros_control for select to authenticated
-  using (app.rol_en(org_id) in ('admin', 'editor', 'lector'));
-
--- Después de guardar: calcula distancia, tiempo y alertas
-create or replace function app.registro_control()
-returns trigger language plpgsql security definer set search_path = '' as $$
-declare
-  v_umbral    integer;
-  v_minimo    integer;
-  v_distancia real;
-  v_duracion  integer;
-  v_alertas   text[] := '{}';
-begin
   select umbral_distancia_m, duracion_minima_s into v_umbral, v_minimo
   from public.formularios where id = new.formulario_id;
 
+  -- Distancia entre donde se hizo la encuesta y la ubicación declarada de la finca
   if new.captura_inicio_geom is not null and new.geom is not null then
-    v_distancia := extensions.st_distance(
+    new.distancia_finca_m := extensions.st_distance(
       new.captura_inicio_geom::extensions.geography,
       extensions.st_centroid(new.geom)::extensions.geography);
+  else
+    new.distancia_finca_m := null;
   end if;
+
+  -- Tiempo de llenado según las horas del GPS
   if new.captura_inicio_en is not null and new.captura_fin_en is not null then
-    v_duracion := extract(epoch from (new.captura_fin_en - new.captura_inicio_en))::integer;
+    new.duracion_s := extract(epoch from (new.captura_fin_en - new.captura_inicio_en))::integer;
+  else
+    new.duracion_s := null;
   end if;
 
   if new.captura_inicio_geom is null then
@@ -132,10 +100,10 @@ begin
   if new.ubicacion_simulada then
     v_alertas := v_alertas || 'ubicacion_simulada';
   end if;
-  if v_umbral > 0 and v_distancia is not null and v_distancia > v_umbral then
+  if new.distancia_finca_m is not null and new.distancia_finca_m > v_umbral then
     v_alertas := v_alertas || 'lejos_finca';
   end if;
-  if v_minimo > 0 and v_duracion is not null and v_duracion < v_minimo then
+  if v_minimo > 0 and new.duracion_s is not null and new.duracion_s < v_minimo then
     v_alertas := v_alertas || 'llenado_rapido';
   end if;
   -- Otra finca distinta (a más de 100 m) encuestada desde el mismo punto (menos de 30 m)
@@ -150,28 +118,33 @@ begin
   ) then
     v_alertas := v_alertas || 'mismo_punto';
   end if;
+  new.alertas := v_alertas;
 
-  insert into public.registros_control (registro_id, org_id, distancia_finca_m, duracion_s, alertas, calculado_en)
-  values (new.id, new.org_id, v_distancia, v_duracion, v_alertas, now())
-  on conflict (registro_id) do update set
-    distancia_finca_m = excluded.distancia_finca_m,
-    duracion_s        = excluded.duracion_s,
-    alertas           = excluded.alertas,
-    calculado_en      = excluded.calculado_en;
-  return null;
+  -- Texto para la búsqueda rápida: todos los textos del registro, sin tildes y en minúscula
+  new.texto_busqueda := coalesce((
+    select lower(extensions.unaccent('extensions.unaccent'::regdictionary, string_agg(t #>> '{}', ' ')))
+    from jsonb_path_query(new.datos, 'strict $.** ? (@.type() == "string")') as t
+  ), '');
+
+  return new;
 end;
 $$;
 
-create trigger registros_control
-  after insert or update on public.registros
-  for each row execute function app.registro_control();
+create trigger registros_evidencia
+  before insert or update on public.registros
+  for each row execute function app.registro_evidencia();
 
--- ── 3. Origen de las fotos ────────────────────────────────────────────────────
-alter table public.archivos
-  add column origen      text not null default 'camara' check (origen in ('camara', 'galeria', 'firma')),
-  add column tomada_en   timestamptz,        -- hora de la toma (cámara) o fecha EXIF (galería)
-  add column precision   real,               -- precisión del GPS de la toma, en metros
-  add column exif        jsonb not null default '{}'::jsonb;  -- fecha y GPS originales del archivo
+-- Permisos: la app escribe la evidencia; los campos calculados solo el servidor
+grant insert (captura_inicio_geom, captura_inicio_precision, captura_inicio_en,
+              captura_fin_geom, captura_fin_precision, captura_fin_en,
+              ubicacion_simulada, dispositivo)
+  on public.registros to authenticated;
+grant update (captura_inicio_geom, captura_inicio_precision, captura_inicio_en,
+              captura_fin_geom, captura_fin_precision, captura_fin_en,
+              ubicacion_simulada, dispositivo)
+  on public.registros to authenticated;
+grant update (umbral_distancia_m, duracion_minima_s) on public.formularios to authenticated;
+grant insert (umbral_distancia_m, duracion_minima_s) on public.formularios to authenticated;
 
 -- ── 5. Acceso de emergencia ───────────────────────────────────────────────────
 alter table public.miembros
