@@ -91,6 +91,8 @@ export function EditorFormulario() {
   useEffect(() => { cargar(); }, [cargar]);
 
   const hayCambios = datos !== null && JSON.stringify(datos) !== guardado;
+  // Solo tiene sentido publicar si el esquema es distinto a la versión publicada
+  const hayQuePublicar = datos !== null && (!publicado || JSON.stringify(datos.esquema) !== JSON.stringify(publicado));
 
   // Mientras haya cambios sin guardar, se copian en el navegador
   useEffect(() => {
@@ -291,7 +293,8 @@ export function EditorFormulario() {
             <button className="btn-secondary h-8 px-3" onClick={guardar} disabled={ocupado || !hayCambios}>
               <Save className="h-4 w-4" /> Guardar
             </button>
-            <button className="btn-primary h-8 px-3" onClick={publicar} disabled={ocupado}>
+            <button className="btn-primary h-8 px-3" onClick={publicar} disabled={ocupado || !hayQuePublicar}
+              title={hayQuePublicar ? undefined : 'No hay cambios respecto a la versión publicada'}>
               <Send className="h-4 w-4" /> Publicar
             </button>
           </>
