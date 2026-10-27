@@ -1,0 +1,42 @@
+@import 'tailwindcss';
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/600.css';
+
+/* Misma paleta del panel */
+@theme {
+  --color-primary: #0f6e56;
+  --color-primary-mid: #1d9e75;
+  --color-primary-light: #d6f0e8;
+  --color-accent: #854f0b;
+  --color-geo-text: #2c2c2a;
+  --color-geo-gray: #f0efec;
+  --font-sans: 'Inter', system-ui, sans-serif;
+}
+
+@layer base {
+  html, body, #root { height: 100%; }
+  body {
+    @apply bg-geo-gray text-geo-text antialiased;
+    /* Respeta la muesca y la barra del sistema */
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    -webkit-tap-highlight-color: transparent;
+  }
+  input, select, textarea { font-size: 16px; } /* evita el zoom automático al escribir */
+}
+
+@layer components {
+  .btn-primario {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 font-semibold text-white
+           active:bg-primary-mid disabled:opacity-50;
+  }
+  .btn-secundario {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 font-medium
+           text-geo-text active:bg-geo-gray disabled:opacity-50;
+  }
+  .tarjeta { @apply rounded-2xl border border-gray-100 bg-white p-4 shadow-sm; }
+  .entrada {
+    @apply w-full rounded-xl border border-gray-200 bg-white px-3 py-3 placeholder-gray-400
+           focus:border-transparent focus:outline-none focus:ring-2 focus:ring-primary;
+  }
+  .etiqueta { @apply mb-1 block text-sm font-medium text-gray-700; }
+}
