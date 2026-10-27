@@ -1,0 +1,18 @@
+{
+  "name": "@geoorigen/motor",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Motor de formularios de GeoOrigen Campo: tipos, condiciones, fórmulas y validaciones. Compartido por la app y el panel.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "~6.0.2",
+    "vitest": "^4.0.0"
+  }
+}

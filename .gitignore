@@ -15,15 +15,15 @@ dist-ssr
 .env
 
 # Vite preview (HTML de un solo archivo — generado, no versionado)
-dist-preview/
+**/dist-preview/
 
 # Android (se regenera con `npx cap sync android`)
-android/app/build
-android/build
-android/.gradle
-android/local.properties
-android/app/release
-android/app/debug
+**/android/app/build
+**/android/build
+**/android/.gradle
+**/android/local.properties
+**/android/app/release
+**/android/app/debug
 
 # Keystores — NO subir al repo; guardar en lugar seguro (ver README)
 *.jks

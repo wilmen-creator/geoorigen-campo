@@ -18,7 +18,7 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
-      - name: Setup JDK 17
+      - name: Setup JDK 21
         uses: actions/setup-java@v4
         with:
           java-version: '21'
@@ -28,14 +28,18 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Test motor
+        run: npm test
+
       - name: Build web app
-        run: npm run build
+        run: npm run build:app
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
 
       - name: Sync Capacitor
         run: npx cap sync android
+        working-directory: apps/app
 
       - name: Setup Android SDK 36
         run: |
@@ -45,15 +49,15 @@ jobs:
             "platform-tools"
 
       - name: Make gradlew executable
-        run: chmod +x android/gradlew
+        run: chmod +x apps/app/android/gradlew
 
       - name: Build debug APK
         run: ./gradlew assembleDebug
-        working-directory: android
+        working-directory: apps/app/android
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: GeoOrigen-Campo-debug
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          path: apps/app/android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
