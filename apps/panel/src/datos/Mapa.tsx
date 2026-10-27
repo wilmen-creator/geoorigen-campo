@@ -11,6 +11,15 @@ export const COLOR_ESTADO: Record<string, string> = {
   borrador: '#9ca3af', enviado: '#3b82f6', revisado: '#f59e0b', aprobado: '#10b981', rechazado: '#ef4444',
 };
 
+// La finca es un rombo amarillo con borde negro: se distingue por la forma de las
+// encuestas (círculos de color por estado) y se ve bien sobre la imagen satelital.
+const COLOR_FINCA = '#facc15';
+const iconoFinca = (activo: boolean) => L.divIcon({
+  className: '',
+  iconSize: activo ? [18, 18] : [14, 14],
+  html: `<div style="width:100%;height:100%;transform:rotate(45deg);background:${COLOR_FINCA};border:2px solid #111827;box-shadow:0 0 0 1px #fff"></div>`,
+});
+
 const escapar = (t: string) => t.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
 export function Mapa({ filas, esquema, seleccionado, onElegir }: {
@@ -60,12 +69,12 @@ export function Mapa({ filas, esquema, seleccionado, onElegir }: {
       const activo = r.id === seleccionado;
       if (r.finca_lat != null && r.finca_lon != null) {
         const finca: L.LatLngExpression = [r.finca_lat, r.finca_lon];
-        L.circleMarker(finca, { radius: 4, color: '#6b7280', weight: 1, fillColor: '#ffffff', fillOpacity: 1 })
+        L.marker(finca, { icon: iconoFinca(activo), zIndexOffset: activo ? 1000 : 0 })
           .bindTooltip(`Finca · ${escapar(titulo)}`).on('click', () => elegir.current(r.id)).addTo(g);
         puntos.push(finca);
         if (r.captura_lat != null && r.captura_lon != null) {
           L.polyline([finca, [r.captura_lat, r.captura_lon]], {
-            color: r.alertas.includes('lejos_finca') ? '#ef4444' : '#9ca3af', weight: 1.5, dashArray: '4 4',
+            color: r.alertas.includes('lejos_finca') ? '#ef4444' : '#ffffff', weight: 2, dashArray: '4 4',
           }).addTo(g);
         }
       }
@@ -100,7 +109,7 @@ export function Mapa({ filas, esquema, seleccionado, onElegir }: {
           </span>
         ))}
         <span className="inline-flex items-center gap-1">
-          <span className="inline-block h-2 w-2 rounded-full border border-gray-500 bg-white" /> finca
+          <span className="inline-block h-2.5 w-2.5 rotate-45 border-2 border-gray-900" style={{ background: COLOR_FINCA }} /> finca
         </span>
       </div>
     </div>
