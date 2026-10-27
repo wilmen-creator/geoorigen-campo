@@ -25,6 +25,21 @@ interface Datos {
   duracion_minima_s: number;
 }
 
+// Copia local de los cambios sin guardar: sobrevive a recargas o cierres del navegador
+const claveBorrador = (id: string) => `geoorigen.panel.borrador.${id}`;
+function leerBorrador(id: string): Datos | null {
+  try {
+    const t = localStorage.getItem(claveBorrador(id));
+    return t ? (JSON.parse(t) as Datos) : null;
+  } catch { return null; }
+}
+function escribirBorrador(id: string, d: Datos | null) {
+  try {
+    if (d) localStorage.setItem(claveBorrador(id), JSON.stringify(d));
+    else localStorage.removeItem(claveBorrador(id));
+  } catch { /* navegador sin almacenamiento: solo se pierde la copia local */ }
+}
+
 function normalizar(schema: unknown): Esquema {
   const e = (schema ?? {}) as Partial<Esquema>;
   return { version: 2, claveNombre: e.claveNombre ?? '', claveSubtitulo: e.claveSubtitulo ?? '',
@@ -47,6 +62,7 @@ export function EditorFormulario() {
   const [ocupado, setOcupado] = useState(false);
   const [mensaje, setMensaje] = useState<{ tipo: 'ok' | 'error'; texto: string } | null>(null);
   const [problemas, setProblemas] = useState<Problema[] | null>(null);
+  const [recuperable, setRecuperable] = useState<Datos | null>(null);
 
   const cargar = useCallback(async () => {
     const { data, error } = await supabase
@@ -62,6 +78,8 @@ export function EditorFormulario() {
     };
     setDatos(d);
     setGuardado(JSON.stringify(d));
+    const borrador = leerBorrador(id!);
+    setRecuperable(borrador && JSON.stringify(borrador) !== JSON.stringify(d) ? borrador : null);
     setVersionActual(data.version_actual);
     if (data.version_actual) {
       const { data: v } = await supabase.from('formulario_versiones').select('schema')
@@ -73,6 +91,12 @@ export function EditorFormulario() {
   useEffect(() => { cargar(); }, [cargar]);
 
   const hayCambios = datos !== null && JSON.stringify(datos) !== guardado;
+
+  // Mientras haya cambios sin guardar, se copian en el navegador
+  useEffect(() => {
+    if (!datos || recuperable) return;
+    escribirBorrador(id!, hayCambios ? datos : null);
+  }, [datos, hayCambios, recuperable, id]);
 
   // Avisar antes de cerrar la pestaña con cambios sin guardar
   useEffect(() => {
@@ -280,6 +304,14 @@ export function EditorFormulario() {
             {mensaje.tipo === 'ok' ? <CheckCircle2 className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />} {mensaje.texto}
           </span>
           <button onClick={() => setMensaje(null)}><X className="h-4 w-4" /></button>
+        </div>
+      )}
+
+      {recuperable && (
+        <div className="flex flex-wrap items-center gap-3 border-b border-amber-100 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+          <span className="flex-1">Hay cambios sin guardar de una sesión anterior (guardados en este navegador).</span>
+          <button className="btn-primary h-8 px-3" onClick={() => { setDatos(recuperable); setRecuperable(null); }}>Recuperar</button>
+          <button className="btn-secondary h-8 px-3" onClick={() => { escribirBorrador(id!, null); setRecuperable(null); }}>Descartar</button>
         </div>
       )}
 
