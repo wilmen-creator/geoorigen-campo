@@ -6,7 +6,7 @@ import { useSesion } from '../lib/sesion.tsx';
 
 const MODULOS = [
   { a: '/tablero', texto: 'Tablero', icono: LayoutDashboard, listo: false },
-  { a: '/datos', texto: 'Datos', icono: Table2, listo: false },
+  { a: '/datos', texto: 'Datos', icono: Table2, listo: true },
   { a: '/formularios', texto: 'Formularios', icono: ClipboardList, listo: true },
   { a: '/equipo', texto: 'Equipo', icono: Users, listo: true },
 ];

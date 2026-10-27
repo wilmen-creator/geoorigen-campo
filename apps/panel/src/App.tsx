@@ -5,6 +5,7 @@ import { Entrar, NuevaClave, SinAcceso, SinConfigurar } from './paginas/Entrar.t
 import { ElegirOrg } from './paginas/ElegirOrg.tsx';
 import { Formularios } from './paginas/Formularios.tsx';
 import { Equipo } from './paginas/Equipo.tsx';
+import { Datos } from './datos/Datos.tsx';
 import { EditorFormulario } from './editor/EditorFormulario.tsx';
 import { Marco } from './componentes/Marco.tsx';
 
@@ -31,6 +32,7 @@ function Rutas() {
         <Route path="/formularios" element={<Formularios />} />
         <Route path="/formularios/:id" element={<EditorFormulario />} />
         <Route path="/equipo" element={<Equipo />} />
+        <Route path="/datos" element={<Datos />} />
         <Route path="*" element={<Navigate to="/formularios" replace />} />
       </Route>
     </Routes>
