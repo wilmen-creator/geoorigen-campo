@@ -28,6 +28,9 @@ interface ContextoSesion {
 }
 
 const Contexto = createContext<ContextoSesion | null>(null);
+
+// Se lee al cargar, antes de que el cliente de Supabase limpie el enlace
+const LLEGO_POR_INVITACION = /[#&?]type=invite\b/.test(window.location.hash + window.location.search);
 const CLAVE_ORG = 'geoorigen.panel.org';
 
 function leerOrgGuardada(): string | null {
@@ -40,7 +43,8 @@ function guardarOrg(id: string) {
 export function ProveedorSesion({ children }: { children: ReactNode }) {
   const [sesion, setSesion] = useState<Session | null>(null);
   const [cargando, setCargando] = useState(true);
-  const [recuperando, setRecuperando] = useState(false);
+  // Quien llega desde el correo de invitación aún no tiene contraseña: se le pide crearla
+  const [recuperando, setRecuperando] = useState(() => LLEGO_POR_INVITACION);
   const [membresias, setMembresias] = useState<Membresia[]>([]);
   const [orgId, setOrgId] = useState<string | null>(leerOrgGuardada());
   const [esPlataformaAdmin, setEsPlataformaAdmin] = useState(false);

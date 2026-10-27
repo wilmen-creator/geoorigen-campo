@@ -8,7 +8,7 @@ const MODULOS = [
   { a: '/tablero', texto: 'Tablero', icono: LayoutDashboard, listo: false },
   { a: '/datos', texto: 'Datos', icono: Table2, listo: false },
   { a: '/formularios', texto: 'Formularios', icono: ClipboardList, listo: true },
-  { a: '/miembros', texto: 'Equipo', icono: Users, listo: false },
+  { a: '/equipo', texto: 'Equipo', icono: Users, listo: true },
 ];
 
 const ROLES: Record<string, string> = {

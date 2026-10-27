@@ -4,6 +4,7 @@ import { configurado } from './lib/supabase.ts';
 import { Entrar, NuevaClave, SinAcceso, SinConfigurar } from './paginas/Entrar.tsx';
 import { ElegirOrg } from './paginas/ElegirOrg.tsx';
 import { Formularios } from './paginas/Formularios.tsx';
+import { Equipo } from './paginas/Equipo.tsx';
 import { EditorFormulario } from './editor/EditorFormulario.tsx';
 import { Marco } from './componentes/Marco.tsx';
 
@@ -29,6 +30,7 @@ function Rutas() {
       <Route element={<Marco />}>
         <Route path="/formularios" element={<Formularios />} />
         <Route path="/formularios/:id" element={<EditorFormulario />} />
+        <Route path="/equipo" element={<Equipo />} />
         <Route path="*" element={<Navigate to="/formularios" replace />} />
       </Route>
     </Routes>
