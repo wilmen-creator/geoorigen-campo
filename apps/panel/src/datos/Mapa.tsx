@@ -28,10 +28,19 @@ export function Mapa({ filas, esquema, seleccionado, onElegir }: {
   useEffect(() => {
     if (!caja.current || mapa.current) return;
     const m = L.map(caja.current, { center: [3.53, -75.64], zoom: 11 });
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '&copy; colaboradores de OpenStreetMap',
-    }).addTo(m);
+    // Satélite de Esri (el mismo del sistema de bomberos) con nombres y límites encima
+    const satelite = L.layerGroup([
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        maxZoom: 19, attribution: 'Imágenes &copy; Esri, Maxar, Earthstar Geographics',
+      }),
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+        maxZoom: 19,
+      }),
+    ]).addTo(m);
+    const calles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19, attribution: '&copy; colaboradores de OpenStreetMap',
+    });
+    L.control.layers({ 'Satélite': satelite, 'Mapa de calles': calles }, undefined, { position: 'topright' }).addTo(m);
     capa.current = L.layerGroup().addTo(m);
     mapa.current = m;
     // El contenedor puede cambiar de tamaño al alternar tabla/mapa
