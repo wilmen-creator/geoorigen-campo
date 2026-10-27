@@ -30,6 +30,7 @@ export function Datos() {
   const puedeCambiarEstado = (org?.rol === 'admin' || org?.rol === 'editor') && !org?.expira_en;
 
   const [formularios, setFormularios] = useState<FormularioPublicado[]>([]);
+  const [cargandoForms, setCargandoForms] = useState(true);
   const [formId, setFormId] = useState<string>('');
   const [esquemas, setEsquemas] = useState<Map<string, Esquema>>(new Map());  // clave: id@version
   const [tecnicos, setTecnicos] = useState<{ id: string; nombre: string }[]>([]);
@@ -59,6 +60,7 @@ export function Datos() {
         .eq('org_id', org.org_id).not('version_actual', 'is', null).order('nombre');
       const lista = (data ?? []) as FormularioPublicado[];
       setFormularios(lista);
+      setCargandoForms(false);
       const recordado = leer(`geoorigen.datos.form.${org.org_id}`);
       setFormId(lista.find((f) => f.id === recordado)?.id ?? lista[0]?.id ?? '');
 
@@ -141,6 +143,14 @@ export function Datos() {
     if (tipo === 'kml') exportarKML(filas, esquema, form.nombre);
     if (tipo === 'geojson') exportarGeoJSON(filas, esquema, form.nombre);
   };
+
+  if (cargandoForms) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <span className="h-8 w-8 animate-spin rounded-full border-4 border-primary-light border-t-primary" />
+      </div>
+    );
+  }
 
   if (formularios.length === 0) {
     return (
@@ -301,7 +311,7 @@ export function Datos() {
                       return (
                         <tr key={r.id} onClick={() => setSel(r.id)}
                           className={`cursor-pointer ${sel === r.id ? 'bg-primary-light' : 'hover:bg-geo-gray'}`}>
-                          <td className="px-3 py-2"><p className="font-medium">{titulo}</p>{subtitulo && <p className="text-xs text-gray-400">{subtitulo}</p>}</td>
+                          <td className="min-w-56 px-3 py-2"><p className="font-medium">{titulo}</p>{subtitulo && <p className="text-xs text-gray-400">{subtitulo}</p>}</td>
                           <td className="px-3 py-2 whitespace-nowrap">{r.tecnico_nombre || r.tecnico_email}</td>
                           <td className="px-3 py-2 whitespace-nowrap text-gray-500">{fechaCorta(r.captura_inicio_en ?? r.creado_en)}</td>
                           <td className="px-3 py-2"><span className="badge text-white" style={{ background: COLOR_ESTADO[r.estado] ?? '#6b7280' }}>{r.estado}</span></td>
