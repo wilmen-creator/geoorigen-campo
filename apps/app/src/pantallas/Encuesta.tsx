@@ -48,6 +48,24 @@ export function Encuesta({ registroId, onSalir }: { registroId: string; onSalir:
     });
   }, [registroId, onSalir]);
 
+  // Si el GPS de apertura falló (permiso tardío, sin señal), se reintenta en
+  // silencio mientras la encuesta está abierta. Guarda la hora real del GPS.
+  useEffect(() => {
+    let activo = true;
+    const intentar = async (n: number) => {
+      const r = await db.registros.get(registroId);
+      if (!activo || !r || r.captura_inicio || r.en_servidor || n > 4) return;
+      const { punto, simulada } = await tomarEvidencia();
+      if (punto && activo) {
+        await db.registros.update(registroId, { captura_inicio: punto, ubicacion_simulada: r.ubicacion_simulada || simulada });
+      } else if (activo) {
+        setTimeout(() => intentar(n + 1), 30000);
+      }
+    };
+    const t = setTimeout(() => intentar(1), 25000);  // después del primer intento de nuevaEncuesta
+    return () => { activo = false; clearTimeout(t); };
+  }, [registroId]);
+
   const soloLectura = registro ? BLOQUEADOS.includes(registro.estado) : true;
 
   // Autoguardado: medio segundo después del último cambio
