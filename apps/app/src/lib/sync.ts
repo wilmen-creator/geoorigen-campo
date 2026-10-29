@@ -2,9 +2,12 @@
 //   1. sube encuestas pendientes  2. sube fotos y firmas  3. baja formularios
 //   4. baja el estado de sus encuestas (revisada, aprobada, rechazada…)
 
-import type { Esquema, Ubicacion } from '@geoorigen/motor';
+import { claveTitulo, type Esquema, type Ubicacion } from '@geoorigen/motor';
 import { supabase, mensajeError } from './supabase.ts';
-import { db, type FormularioLocal, type PuntoGPS, type RegistroLocal } from './db.ts';
+import { db, esDe, porSubir, type FormularioLocal, type PuntoGPS, type RegistroLocal } from './db.ts';
+
+/** Avisa en pantalla qué se está subiendo */
+export type Avance = (texto: string) => void;
 
 export interface ResultadoSync {
   subidas: number;
@@ -17,15 +20,22 @@ export interface ResultadoSync {
 const ewkt = (lat: number, lon: number) => `SRID=4326;POINT(${lon} ${lat})`;
 const punto = (p: PuntoGPS | null) => (p ? ewkt(p.lat, p.lon) : null);
 
+function tituloLocal(r: RegistroLocal, form: FormularioLocal | undefined) {
+  const clave = form ? claveTitulo(form.esquema) : '';
+  const t = clave ? r.datos[clave] : '';
+  return typeof t === 'string' ? t : '';
+}
+
 /** Ubicación de la finca: el campo GPS que el formulario marcó como tal */
 function geomFinca(r: RegistroLocal, esquema: Esquema | undefined) {
   const v = esquema?.claveUbicacion ? (r.datos[esquema.claveUbicacion] as Ubicacion | undefined) : undefined;
   return v && typeof v === 'object' && 'lat' in v ? ewkt(v.lat, v.lon) : null;
 }
 
-async function subirRegistros(orgId: string, res: ResultadoSync) {
-  const pendientes = await db.registros.where({ pendiente: 1 }).filter((r) => r.org_id === orgId).toArray();
-  for (const r of pendientes) {
+async function subirRegistros(orgId: string, userId: string | undefined, res: ResultadoSync, avance: Avance) {
+  const pendientes = await db.registros.where({ pendiente: 1 }).filter((r) => r.org_id === orgId && esDe(r, userId) && porSubir(r)).toArray();
+  for (const [i, r] of pendientes.entries()) {
+    avance(`Subiendo encuesta ${i + 1} de ${pendientes.length}`);
     const form = await db.formularios.get(r.formulario_id);
     const comun = {
       formulario_version: r.formulario_version,
@@ -38,8 +48,9 @@ async function subirRegistros(orgId: string, res: ResultadoSync) {
       captura_fin_en: r.captura_fin?.en ?? null,
       ubicacion_simulada: r.ubicacion_simulada,
     };
-    const { data, error } = r.en_servidor
-      ? await supabase.from('registros').update(comun).eq('id', r.id).select('revision').single()
+    const actualizar = () => supabase.from('registros').update(comun).eq('id', r.id).select('revision').single();
+    let { data, error } = r.en_servidor
+      ? await actualizar()
       : await supabase.from('registros').insert({
           ...comun,
           id: r.id, org_id: r.org_id, formulario_id: r.formulario_id, creado_en: r.creado_en,
@@ -48,8 +59,25 @@ async function subirRegistros(orgId: string, res: ResultadoSync) {
           captura_inicio_en: r.captura_inicio?.en ?? null,
           dispositivo: r.dispositivo,
         }).select('revision').single();
-    if (error) {
-      res.errores.push(`${form?.nombre ?? 'Encuesta'}: ${mensajeError(error)}`);
+    // Ya existía: la subida anterior llegó al servidor pero la respuesta se perdió
+    // (señal que se cae). Se actualiza en vez de quedar atascada para siempre.
+    let yaEstaba = false;
+    if (error?.code === '23505') {
+      yaEstaba = true;
+      ({ data, error } = await actualizar());
+    }
+    const nombre = `${form?.nombre ?? 'Encuesta'}${tituloLocal(r, form) ? ` (${tituloLocal(r, form)})` : ''}`;
+    if (error && /BLOQUEADA/.test(error.message)) {
+      // Ya está en el servidor y no se puede cambiar: o la subida anterior llegó (y la
+      // respuesta se perdió), o la revisaron mientras el técnico la editaba sin señal.
+      // Manda la del servidor, que se baja al final de la sincronización.
+      await db.registros.update(r.id, { en_servidor: true, pendiente: 0, revision: -1 });
+      if (yaEstaba) res.subidas++;
+      else res.errores.push(`${nombre}: ya estaba en revisión; tus últimos cambios no se aplicaron`);
+      continue;
+    }
+    if (error || !data) {
+      res.errores.push(`${nombre}: ${mensajeError(error)}. Sigue guardada en el celular.`);
       continue;
     }
     // Si el colaborador editó mientras subía, se queda pendiente para la próxima vez
@@ -65,16 +93,14 @@ async function subirRegistros(orgId: string, res: ResultadoSync) {
   }
 }
 
-async function subirArchivos(orgId: string, res: ResultadoSync) {
+async function subirArchivos(orgId: string, userId: string | undefined, res: ResultadoSync, avance: Avance) {
   const pendientes = await db.archivos.where({ pendiente: 1 }).filter((a) => a.org_id === orgId).toArray();
-  for (const a of pendientes) {
+  for (const [i, a] of pendientes.entries()) {
     const reg = await db.registros.get(a.registro_id);
-    if (!reg?.en_servidor) continue;  // primero debe existir la encuesta en el servidor
-    // Foto quitada o firma reemplazada: ya no la usa la encuesta, no se sube
-    if (!JSON.stringify(reg.datos).includes(a.id)) {
-      await db.archivos.delete(a.id);
-      continue;
-    }
+    if (!reg?.en_servidor || !esDe(reg, userId)) continue;  // primero debe existir la encuesta en el servidor
+    // Se suben todas, aunque la encuesta ya no la use (foto quitada, firma reemplazada):
+    // en el celular nunca se borra nada que no haya llegado al servidor.
+    avance(`Subiendo foto ${i + 1} de ${pendientes.length}`);
     const ext = a.mime.split('/')[1] === 'jpeg' ? 'jpg' : a.mime.split('/')[1];
     const ruta = `${a.org_id}/${a.registro_id}/${a.id}.${ext}`;
     const { error: e1 } = await supabase.storage.from('campo-archivos').upload(ruta, a.datos, { contentType: a.mime, upsert: false });
@@ -114,17 +140,19 @@ async function bajarFormularios(orgId: string, res: ResultadoSync) {
       version: f.version_actual, esquema: v.schema as Esquema, estados: f.estados ?? [],
     });
   }
-  // Los formularios desasignados o desactivados se quitan; sus encuestas guardadas se conservan
-  await db.transaction('rw', db.formularios, async () => {
+  // Los formularios desasignados o desactivados se quitan, salvo si en el celular
+  // quedan encuestas suyas sin subir (para poder terminarlas y que suban)
+  await db.transaction('rw', db.formularios, db.registros, async () => {
     const ids = new Set(locales.map((f) => f.id));
+    const conPendientes = new Set((await db.registros.where({ pendiente: 1 }).toArray()).map((r) => r.formulario_id));
     const viejos = await db.formularios.where({ org_id: orgId }).toArray();
-    await db.formularios.bulkDelete(viejos.filter((f) => !ids.has(f.id)).map((f) => f.id));
+    await db.formularios.bulkDelete(viejos.filter((f) => !ids.has(f.id) && !conPendientes.has(f.id)).map((f) => f.id));
     await db.formularios.bulkPut(locales);
   });
   res.formularios = locales.length;
 }
 
-async function bajarRegistros(orgId: string, res: ResultadoSync) {
+async function bajarRegistros(orgId: string, userId: string | undefined, res: ResultadoSync) {
   // Las reglas del servidor solo devuelven las del colaborador y las asignadas a él
   const { data, error } = await supabase.from('registros')
     .select('id, org_id, formulario_id, formulario_version, estado, datos, revision, creado_en, actualizado_en, eliminado')
@@ -137,7 +165,7 @@ async function bajarRegistros(orgId: string, res: ResultadoSync) {
     if (local && local.revision === s.revision) continue;
     await db.registros.put({
       id: s.id, org_id: s.org_id, formulario_id: s.formulario_id, formulario_version: s.formulario_version,
-      estado: s.estado, datos: s.datos, creado_en: s.creado_en, actualizado_en: s.actualizado_en,
+      user_id: local?.user_id ?? userId, estado: s.estado, datos: s.datos, creado_en: s.creado_en, actualizado_en: s.actualizado_en,
       captura_inicio: local?.captura_inicio ?? null, captura_fin: local?.captura_fin ?? null,
       ubicacion_simulada: local?.ubicacion_simulada ?? false, dispositivo: local?.dispositivo ?? {},
       en_servidor: true, pendiente: 0, revision: s.revision, sincronizado_en: new Date().toISOString(),
@@ -146,15 +174,25 @@ async function bajarRegistros(orgId: string, res: ResultadoSync) {
   }
 }
 
-export async function sincronizar(orgId: string): Promise<ResultadoSync> {
+export async function sincronizar(orgId: string, userId: string | undefined, avance: Avance = () => {}): Promise<ResultadoSync> {
   const res: ResultadoSync = { subidas: 0, fotos: 0, formularios: 0, actualizadas: 0, errores: [] };
   if (!navigator.onLine) {
     res.errores.push('Sin conexión a internet');
     return res;
   }
-  await subirRegistros(orgId, res);
-  await subirArchivos(orgId, res);
-  await bajarFormularios(orgId, res);
-  await bajarRegistros(orgId, res);
+  // Cada paso por separado: si uno falla, los demás siguen y nada se borra del celular
+  const pasos: [string, () => Promise<void>][] = [
+    ['Subir encuestas', () => subirRegistros(orgId, userId, res, avance)],
+    ['Subir fotos', () => subirArchivos(orgId, userId, res, avance)],
+    ['Bajar formularios', () => { avance('Actualizando formularios'); return bajarFormularios(orgId, res); }],
+    ['Bajar encuestas', () => { avance('Revisando estados'); return bajarRegistros(orgId, userId, res); }],
+  ];
+  for (const [nombre, paso] of pasos) {
+    try {
+      await paso();
+    } catch (e) {
+      res.errores.push(`${nombre}: ${mensajeError(e as Error)}`);
+    }
+  }
   return res;
 }

@@ -27,6 +27,9 @@ export interface RegistroLocal {
   org_id: string;
   formulario_id: string;
   formulario_version: number;
+  /** Quién la hizo en este celular (celular compartido: cada técnico ve y sube solo las suyas).
+   *  Vacío en las encuestas de versiones anteriores de la app. */
+  user_id?: string;
   estado: string;            // borrador | enviado | revisado | aprobado | rechazado
   datos: Valores;
   creado_en: string;
@@ -84,10 +87,38 @@ export async function guardarLocal(r: RegistroLocal) {
   await db.registros.put({ ...r, actualizado_en: new Date().toISOString(), pendiente: 1 });
 }
 
-export async function contarPendientes(orgId: string) {
-  const [regs, archs] = await Promise.all([
-    db.registros.where({ pendiente: 1 }).filter((r) => r.org_id === orgId).count(),
-    db.archivos.where({ pendiente: 1 }).filter((a) => a.org_id === orgId).count(),
-  ]);
-  return { registros: regs, archivos: archs };
+/** ¿La encuesta es de este usuario? Las de versiones anteriores (sin dueño) cuentan para quien entre. */
+export const esDe = (r: RegistroLocal, userId: string | undefined) => !r.user_id || r.user_id === userId;
+
+/** Solo se suben las encuestas completas (enviadas): un borrador a medias se queda en
+ *  el celular hasta que el técnico la termine, para no subir datos incompletos o duplicados. */
+export const porSubir = (r: RegistroLocal) => !!r.pendiente && r.estado !== 'borrador';
+export const incompleta = (r: RegistroLocal) => !!r.pendiente && r.estado === 'borrador';
+
+/** Ya está en el servidor y no tiene cambios: el técnico no la puede editar, salvo que
+ *  un admin o editor la devuelva para corregir (estado rechazado). */
+export const bloqueada = (r: RegistroLocal) => r.en_servidor && !r.pendiente && r.estado !== 'rechazado';
+
+/** Texto sin tildes y en minúscula, para buscar */
+export const normalizar = (t: string) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+
+export async function contarPendientes(orgId: string, userId?: string) {
+  const mios = await db.registros.where({ pendiente: 1 }).filter((r) => r.org_id === orgId && esDe(r, userId)).toArray();
+  const archs = await db.archivos.where({ pendiente: 1 }).filter((a) => a.org_id === orgId).toArray();
+  let archivos = 0;
+  for (const a of archs) {
+    const r = await db.registros.get(a.registro_id);
+    if (r && esDe(r, userId) && (r.en_servidor || porSubir(r))) archivos++;
+  }
+  return { registros: mios.filter(porSubir).length, incompletas: mios.filter(incompleta).length, archivos };
+}
+
+/** Todo lo que hay sin subir en el celular, de cualquier usuario (para avisar antes de salir) */
+export async function contarPendientesCelular() {
+  return (await db.registros.where({ pendiente: 1 }).count()) + (await db.archivos.where({ pendiente: 1 }).count());
+}
+
+// Pide al sistema que no borre la base del celular aunque falte espacio
+export async function pedirAlmacenamientoPersistente() {
+  try { await navigator.storage?.persist?.(); } catch { /* no disponible */ }
 }

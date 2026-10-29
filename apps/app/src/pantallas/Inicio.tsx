@@ -1,9 +1,9 @@
 // Inicio: botón de sincronizar y los formularios asignados.
 
 import { useCallback, useEffect, useState } from 'react';
-import { RefreshCw, Settings, CloudUpload, WifiOff, CheckCircle2, AlertTriangle, Download } from 'lucide-react';
+import { RefreshCw, Settings, CloudUpload, WifiOff, CheckCircle2, AlertTriangle, Download, ChevronRight } from 'lucide-react';
 import { ENLACE_DESCARGA, versionNueva } from '../lib/actualizacion.ts';
-import { db, contarPendientes, type FormularioLocal } from '../lib/db.ts';
+import { db, contarPendientes, esDe, porSubir, normalizar, type FormularioLocal } from '../lib/db.ts';
 import { sincronizar, type ResultadoSync } from '../lib/sync.ts';
 import { useSesion } from '../lib/sesion.tsx';
 
@@ -13,8 +13,10 @@ export function Inicio({ onFormulario, onAjustes }: { onFormulario: (f: Formular
   const { org, sesion, recargarMembresias } = useSesion();
   const [formularios, setFormularios] = useState<FormularioLocal[]>([]);
   const [conteos, setConteos] = useState<Map<string, { total: number; pendientes: number }>>(new Map());
-  const [pendientes, setPendientes] = useState({ registros: 0, archivos: 0 });
+  const [pendientes, setPendientes] = useState({ registros: 0, incompletas: 0, archivos: 0 });
   const [sincronizando, setSincronizando] = useState(false);
+  const [avance, setAvance] = useState('');
+  const [filtro, setFiltro] = useState('');
   const [resultado, setResultado] = useState<ResultadoSync | null>(null);
   const [enLinea, setEnLinea] = useState(navigator.onLine);
   const [ultima, setUltima] = useState(() => { try { return localStorage.getItem(CLAVE_ULTIMA); } catch { return null; } });
@@ -23,17 +25,17 @@ export function Inicio({ onFormulario, onAjustes }: { onFormulario: (f: Formular
     if (!org) return;
     const fs = (await db.formularios.where({ org_id: org.org_id }).toArray()).sort((a, b) => a.nombre.localeCompare(b.nombre));
     setFormularios(fs);
-    const regs = await db.registros.where({ org_id: org.org_id }).toArray();
+    const regs = (await db.registros.where({ org_id: org.org_id }).toArray()).filter((r) => esDe(r, sesion?.user.id));
     const m = new Map<string, { total: number; pendientes: number }>();
     for (const r of regs) {
       const c = m.get(r.formulario_id) ?? { total: 0, pendientes: 0 };
       c.total++;
-      if (r.pendiente) c.pendientes++;
+      if (porSubir(r)) c.pendientes++;
       m.set(r.formulario_id, c);
     }
     setConteos(m);
-    setPendientes(await contarPendientes(org.org_id));
-  }, [org]);
+    setPendientes(await contarPendientes(org.org_id, sesion?.user.id));
+  }, [org, sesion]);
 
   useEffect(() => { cargar(); }, [cargar]);
   const [nueva, setNueva] = useState<string | null>(null);
@@ -49,10 +51,17 @@ export function Inicio({ onFormulario, onAjustes }: { onFormulario: (f: Formular
     if (!org) return;
     setSincronizando(true);
     setResultado(null);
-    await recargarMembresias();
-    const r = await sincronizar(org.org_id);
+    let r: ResultadoSync;
+    try {
+      await recargarMembresias();
+      r = await sincronizar(org.org_id, sesion?.user.id, setAvance);
+    } catch (e) {
+      r = { subidas: 0, fotos: 0, formularios: 0, actualizadas: 0, errores: [(e as Error).message] };
+    } finally {
+      setSincronizando(false);
+      setAvance('');
+    }
     setResultado(r);
-    setSincronizando(false);
     if (r.errores.length === 0) {
       const ahora = new Date().toISOString();
       setUltima(ahora);
@@ -85,13 +94,16 @@ export function Inicio({ onFormulario, onAjustes }: { onFormulario: (f: Formular
         )}
         <button className="btn-primario w-full py-4 text-lg" onClick={sincronizarTodo} disabled={sincronizando || !enLinea}>
           {!enLinea ? <><WifiOff className="h-5 w-5" /> Sin señal</> : (
-            <><RefreshCw className={`h-5 w-5 ${sincronizando ? 'animate-spin' : ''}`} /> {sincronizando ? 'Sincronizando…' : 'Sincronizar'}</>
+            <><RefreshCw className={`h-5 w-5 ${sincronizando ? 'animate-spin' : ''}`} /> {sincronizando ? (avance || 'Sincronizando…') : 'Sincronizar'}</>
           )}
         </button>
         <p className="-mt-2 text-center text-xs text-gray-500">
           {totalPendiente > 0
             ? <span className="inline-flex items-center gap-1 text-accent"><CloudUpload className="h-3.5 w-3.5" /> {pendientes.registros} encuesta(s) y {pendientes.archivos} foto(s) por subir</span>
             : 'Todo está subido'}
+          {pendientes.incompletas > 0 && (
+            <span className="block">{pendientes.incompletas} encuesta(s) sin terminar: se suben cuando las envíes</span>
+          )}
           {ultima && <span className="block">Última sincronización: {new Date(ultima).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' })}</span>}
         </p>
 
@@ -107,6 +119,9 @@ export function Inicio({ onFormulario, onAjustes }: { onFormulario: (f: Formular
               {resultado.actualizadas > 0 && ` · ${resultado.actualizadas} encuesta(s) con cambios del revisor`}
             </p>
             {resultado.errores.slice(0, 4).map((e, i) => <p key={i} className="text-xs">• {e}</p>)}
+            {resultado.errores.length > 0 && (
+              <p className="mt-1 text-xs font-medium">Lo que no subió sigue guardado en este celular. Vuelve a sincronizar cuando tengas mejor señal.</p>
+            )}
           </div>
         )}
 
@@ -116,19 +131,26 @@ export function Inicio({ onFormulario, onAjustes }: { onFormulario: (f: Formular
             {ultima ? 'No tienes formularios asignados.' : 'Toca "Sincronizar" para descargar tus formularios.'}
           </p>
         ) : (
-          <div className="grid grid-cols-2 gap-3">
-            {formularios.map((f) => {
-              const c = conteos.get(f.id);
-              return (
-                <button key={f.id} onClick={() => onFormulario(f)} className="tarjeta flex flex-col items-start gap-1 text-left active:bg-geo-gray">
-                  <span className="text-3xl">{f.icono}</span>
-                  <span className="font-semibold leading-tight">{f.nombre}</span>
-                  <span className="text-xs text-gray-500">{c?.total ?? 0} encuesta(s)</span>
-                  {!!c?.pendientes && <span className="text-xs text-accent">{c.pendientes} por subir</span>}
-                </button>
-              );
-            })}
-          </div>
+          <>
+            {formularios.length > 6 && (
+              <input className="input" type="search" placeholder="Buscar formulario…" value={filtro} onChange={(e) => setFiltro(e.target.value)} />
+            )}
+            <div className="tarjeta divide-y divide-gray-100 p-0">
+              {formularios.filter((f) => normalizar(f.nombre).includes(normalizar(filtro))).map((f) => {
+                const c = conteos.get(f.id);
+                return (
+                  <button key={f.id} onClick={() => onFormulario(f)} className="flex w-full items-center gap-3 px-4 py-3 text-left active:bg-geo-gray">
+                    <span className="min-w-0 flex-1 truncate font-semibold">{f.nombre}</span>
+                    <span className="shrink-0 text-xs text-gray-500">{c?.total ?? 0}</span>
+                    {c?.pendientes
+                      ? <span className="inline-flex shrink-0 items-center gap-0.5 text-xs text-accent"><CloudUpload className="h-4 w-4" />{c.pendientes}</span>
+                      : <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" aria-label="Todo subido" />}
+                    <ChevronRight className="h-4 w-4 shrink-0 text-gray-300" />
+                  </button>
+                );
+              })}
+            </div>
+          </>
         )}
       </div>
     </div>

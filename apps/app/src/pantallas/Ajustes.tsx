@@ -8,8 +8,8 @@ export function Ajustes({ onVolver }: { onVolver: () => void }) {
   const [pendientes, setPendientes] = useState(0);
 
   useEffect(() => {
-    if (org) contarPendientes(org.org_id).then((p) => setPendientes(p.registros + p.archivos));
-  }, [org]);
+    if (org) contarPendientes(org.org_id, sesion?.user.id).then((p) => setPendientes(p.registros + p.incompletas + p.archivos));
+  }, [org, sesion]);
 
   const cerrarSesion = async () => {
     const aviso = pendientes

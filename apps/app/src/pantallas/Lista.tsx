@@ -1,9 +1,9 @@
 // Encuestas de un formulario guardadas en el celular.
 
 import { useEffect, useState } from 'react';
-import { ArrowLeft, Plus, CloudUpload, Trash2 } from 'lucide-react';
+import { ArrowLeft, Plus, CloudUpload, Trash2, CheckCircle2, PencilLine, Search } from 'lucide-react';
 import { claveTitulo } from '@geoorigen/motor';
-import { db, type FormularioLocal, type RegistroLocal } from '../lib/db.ts';
+import { db, esDe, normalizar, porSubir, type FormularioLocal, type RegistroLocal } from '../lib/db.ts';
 import { borrarArchivo } from '../lib/fotos.ts';
 
 const ESTADO: Record<string, { texto: string; clase: string }> = {
@@ -11,16 +11,17 @@ const ESTADO: Record<string, { texto: string; clase: string }> = {
   enviado: { texto: 'Enviada', clase: 'bg-blue-100 text-blue-700' },
   revisado: { texto: 'Revisada', clase: 'bg-amber-100 text-amber-700' },
   aprobado: { texto: 'Aprobada', clase: 'bg-emerald-100 text-emerald-700' },
-  rechazado: { texto: 'Rechazada', clase: 'bg-red-100 text-red-700' },
+  rechazado: { texto: 'Para corregir', clase: 'bg-red-100 text-red-700' },
 };
 
-export function Lista({ form, onAbrir, onNueva, onVolver }: {
-  form: FormularioLocal; onAbrir: (id: string) => void; onNueva: () => void; onVolver: () => void;
+export function Lista({ form, userId, onAbrir, onNueva, onVolver }: {
+  form: FormularioLocal; userId: string; onAbrir: (id: string) => void; onNueva: () => void; onVolver: () => void;
 }) {
   const [registros, setRegistros] = useState<RegistroLocal[]>([]);
+  const [busqueda, setBusqueda] = useState('');
 
   const cargar = async () => {
-    const rs = await db.registros.where({ formulario_id: form.id }).toArray();
+    const rs = (await db.registros.where({ formulario_id: form.id }).toArray()).filter((r) => esDe(r, userId));
     setRegistros(rs.sort((a, b) => b.actualizado_en.localeCompare(a.actualizado_en)));
   };
   useEffect(() => { cargar(); }, [form.id]);
@@ -35,6 +36,12 @@ export function Lista({ form, onAbrir, onNueva, onVolver }: {
     return typeof s === 'string' ? s : '';
   };
 
+  // Busca en todas las respuestas de texto: cédula, nombre del productor, finca, vereda…
+  const q = normalizar(busqueda);
+  const visibles = q
+    ? registros.filter((r) => normalizar(Object.values(r.datos).filter((v) => typeof v === 'string' || typeof v === 'number').join(' ')).includes(q))
+    : registros;
+
   // Solo se pueden borrar los borradores que nunca se subieron
   const borrar = async (r: RegistroLocal) => {
     if (!confirm('¿Borrar este borrador? No se puede deshacer.')) return;
@@ -48,21 +55,37 @@ export function Lista({ form, onAbrir, onNueva, onVolver }: {
     <div className="flex h-full flex-col">
       <header className="flex items-center gap-3 bg-primary px-3 py-3 text-white">
         <button onClick={onVolver} className="rounded-lg p-1 active:bg-white/20" aria-label="Volver"><ArrowLeft className="h-6 w-6" /></button>
-        <h1 className="min-w-0 flex-1 truncate text-lg font-bold">{form.icono} {form.nombre}</h1>
+        <h1 className="min-w-0 flex-1 truncate text-lg font-bold">{form.nombre}</h1>
       </header>
 
       <div className="flex-1 space-y-2 overflow-y-auto p-4 pb-24">
+        {registros.length > 0 && (
+          <label className="relative block">
+            <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <input className="input pl-9" type="search" placeholder="Cédula, productor o finca" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
+          </label>
+        )}
         {registros.length === 0 && <p className="tarjeta text-center text-sm text-gray-500">Todavía no hay encuestas. Toca "Nueva encuesta".</p>}
-        {registros.map((r) => {
+        {registros.length > 0 && visibles.length === 0 && <p className="tarjeta text-center text-sm text-gray-500">Ninguna encuesta coincide con "{busqueda}".</p>}
+        {visibles.map((r) => {
           const e = ESTADO[r.estado] ?? { texto: r.estado, clase: 'bg-gray-100' };
+          // Símbolo delante: sincronizada, por subir o sin terminar
+          const simbolo = r.estado === 'borrador' && r.pendiente
+            ? <PencilLine className="h-5 w-5 shrink-0 text-gray-400" aria-label="Sin terminar" />
+            : porSubir(r)
+              ? <CloudUpload className="h-5 w-5 shrink-0 text-accent" aria-label="Por subir" />
+              : <CheckCircle2 className="h-5 w-5 shrink-0 text-primary" aria-label="Sincronizada" />;
           return (
             <div key={r.id} className="tarjeta flex items-center gap-3 p-3">
+              {simbolo}
               <button className="min-w-0 flex-1 text-left" onClick={() => onAbrir(r.id)}>
                 <p className="truncate font-semibold">{titulo(r)}</p>
                 {subtitulo(r) && <p className="truncate text-sm text-gray-500">{subtitulo(r)}</p>}
                 <p className="mt-1 flex flex-wrap items-center gap-2 text-xs">
                   <span className={`rounded-full px-2 py-0.5 font-medium ${e.clase}`}>{e.texto}</span>
-                  {!!r.pendiente && <span className="inline-flex items-center gap-1 text-accent"><CloudUpload className="h-3 w-3" /> por subir</span>}
+                  {r.estado === 'borrador' && r.pendiente ? <span className="text-gray-500">sin terminar, no se sube</span>
+                    : porSubir(r) ? <span className="text-accent">por subir</span>
+                    : <span className="text-primary">sincronizada</span>}
                   <span className="text-gray-400">{new Date(r.actualizado_en).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' })}</span>
                 </p>
               </button>

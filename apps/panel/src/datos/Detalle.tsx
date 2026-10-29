@@ -64,6 +64,11 @@ export function Detalle({ registro, esquemaVersion, estados, puedeCambiarEstado,
   const [nombres, setNombres] = useState<Map<string, string>>(new Map());
   const [error, setError] = useState('');
   const { titulo, subtitulo } = tituloRegistro(registro, esquemaVersion);
+  // La app sube también las fotos quitadas y las firmas reemplazadas (nunca borra nada sin subirlo):
+  // se muestran aparte de las que usa la encuesta
+  const usados = JSON.stringify(registro.datos);
+  const enUso = archivos.filter((a) => usados.includes(a.id));
+  const otros = archivos.filter((a) => !usados.includes(a.id));
 
   useEffect(() => {
     (async () => {
@@ -71,9 +76,7 @@ export function Detalle({ registro, esquemaVersion, estados, puedeCambiarEstado,
         supabase.from('archivos').select('id, campo_key, tipo, origen, storage_path, tomada_en, exif').eq('registro_id', registro.id),
         supabase.from('registros_historial').select('revision, estado, cambiado_en, cambiado_por').eq('registro_id', registro.id).order('revision', { ascending: false }),
       ]);
-      // Solo los que usa la encuesta (versiones anteriores de la app subían firmas reemplazadas)
-      const usados = JSON.stringify(registro.datos);
-      const lista = ((as ?? []) as Archivo[]).filter((a) => usados.includes(a.id));
+      const lista = (as ?? []) as Archivo[];
       if (lista.length) {
         // Enlaces privados de 1 hora: el bucket no es público
         const { data: urls } = await supabase.storage.from('campo-archivos').createSignedUrls(lista.map((a) => a.storage_path), 3600);
@@ -121,6 +124,15 @@ export function Detalle({ registro, esquemaVersion, estados, puedeCambiarEstado,
             <span className="badge text-white" style={{ background: COLOR_ESTADO[registro.estado] ?? '#6b7280' }}>{registro.estado}</span>
           )}
         </div>
+        {/* En la app, una encuesta sincronizada no se puede editar hasta que se devuelve */}
+        {puedeCambiarEstado && registro.estado !== 'rechazado' && registro.estado !== 'borrador' && (
+          <button className="btn-secundario w-full text-sm" onClick={() => cambiarEstado('rechazado')}>
+            Devolver al técnico para corregir
+          </button>
+        )}
+        {registro.estado === 'rechazado' && (
+          <p className="text-xs text-gray-500">El técnico puede corregirla en la app. Al reenviarla vuelve a quedar bloqueada.</p>
+        )}
         {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
         <div className="space-y-1 text-sm">
@@ -165,11 +177,11 @@ export function Detalle({ registro, esquemaVersion, estados, puedeCambiarEstado,
           )) : <p className="text-sm text-gray-400">Cargando formulario…</p>}
         </div>
 
-        {archivos.length > 0 && (
+        {enUso.length > 0 && (
           <div className="space-y-2">
             <p className="text-xs font-semibold tracking-wide text-gray-500 uppercase">Fotos y firmas</p>
             <div className="grid grid-cols-3 gap-2">
-              {archivos.map((a) => (
+              {enUso.map((a) => (
                 <a key={a.id} href={a.url} target="_blank" rel="noreferrer" className="relative block overflow-hidden rounded-lg border border-gray-100">
                   {a.url ? <img src={a.url} alt={a.campo_key} className="aspect-square w-full object-cover" /> : <div className="aspect-square bg-geo-gray" />}
                   {a.origen === 'galeria' && (
@@ -179,6 +191,19 @@ export function Detalle({ registro, esquemaVersion, estados, puedeCambiarEstado,
               ))}
             </div>
           </div>
+        )}
+
+        {otros.length > 0 && (
+          <details className="text-xs text-gray-500">
+            <summary className="cursor-pointer">{otros.length} archivo(s) que la encuesta ya no usa (fotos quitadas o firmas reemplazadas)</summary>
+            <div className="mt-2 grid grid-cols-4 gap-2">
+              {otros.map((a) => (
+                <a key={a.id} href={a.url} target="_blank" rel="noreferrer" className="block overflow-hidden rounded border border-gray-100 opacity-70">
+                  {a.url ? <img src={a.url} alt={a.campo_key} className="aspect-square w-full object-cover" /> : <div className="aspect-square bg-geo-gray" />}
+                </a>
+              ))}
+            </div>
+          </details>
         )}
 
         {historial.length > 0 && (

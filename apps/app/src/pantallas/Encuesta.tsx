@@ -2,23 +2,22 @@
 // La evidencia de captura (GPS al abrir y al enviar) se toma en silencio: el
 // técnico no la ve y nunca le impide guardar ni enviar.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, ChevronLeft, ChevronRight, Send, AlertCircle } from 'lucide-react';
 import {
   calcularDerivados, camposVisibles, claveTitulo, seccionesVisibles, validarRegistro,
   type ErrorValidacion, type Valores,
 } from '@geoorigen/motor';
-import { db, guardarLocal, type FormularioLocal, type RegistroLocal } from '../lib/db.ts';
+import { db, bloqueada, guardarLocal, type FormularioLocal, type RegistroLocal } from '../lib/db.ts';
 import { datosDispositivo, tomarEvidencia, vigilarGPS } from '../lib/gps.ts';
 import { CampoApp, type ContextoCampo } from './Campos.tsx';
 
-const BLOQUEADOS = ['revisado', 'aprobado'];
 
 /** Crea una encuesta nueva y empieza a tomar el GPS de captura en segundo plano */
-export async function nuevaEncuesta(form: FormularioLocal): Promise<string> {
+export async function nuevaEncuesta(form: FormularioLocal, userId: string): Promise<string> {
   const ahora = new Date().toISOString();
   const r: RegistroLocal = {
-    id: crypto.randomUUID(), org_id: form.org_id, formulario_id: form.id, formulario_version: form.version,
+    id: crypto.randomUUID(), org_id: form.org_id, formulario_id: form.id, formulario_version: form.version, user_id: userId,
     estado: 'borrador', datos: calcularDerivados(form.esquema, {}), creado_en: ahora, actualizado_en: ahora,
     captura_inicio: null, captura_fin: null, ubicacion_simulada: false, dispositivo: await datosDispositivo(),
     en_servidor: false, pendiente: 1, revision: 0,
@@ -69,18 +68,52 @@ export function Encuesta({ registroId, onSalir }: { registroId: string; onSalir:
   // GPS encendido mientras la encuesta está abierta
   useEffect(() => vigilarGPS(), []);
 
-  const soloLectura = registro ? BLOQUEADOS.includes(registro.estado) : true;
+  // Ya sincronizada: solo lectura, salvo que un admin o editor la devuelva para corregir
+  const soloLectura = registro ? bloqueada(registro) : true;
 
-  // Autoguardado: medio segundo después del último cambio
+  // Autoguardado: medio segundo después del último cambio. Los guardados van en
+  // fila y, al salir de la encuesta o si la app pasa a segundo plano (llamada,
+  // pantalla apagada), se guarda en el acto: nunca se pierde lo último escrito.
+  const ultimoRegistro = useRef<RegistroLocal | null>(null);
+  const sucio = useRef(false);
+  const temporizador = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const enCurso = useRef<Promise<void>>(Promise.resolve());
+  const guardarYa = useCallback(() => {
+    clearTimeout(temporizador.current);
+    enCurso.current = enCurso.current.then(async () => {
+      if (!sucio.current || !ultimoRegistro.current) return;
+      sucio.current = false;
+      const r = ultimoRegistro.current;
+      // La evidencia pudo llegar mientras se escribía: se conserva la de la base
+      const enBase = await db.registros.get(r.id);
+      await guardarLocal({
+        ...r,
+        captura_inicio: enBase?.captura_inicio ?? null,
+        captura_fin: enBase?.captura_fin ?? r.captura_fin,
+        ubicacion_simulada: enBase?.ubicacion_simulada ?? false,
+      });
+    });
+    return enCurso.current;
+  }, []);
+
   useEffect(() => {
     if (!registro || !cambiado.current) return;
-    const t = setTimeout(async () => {
-      // La evidencia pudo llegar mientras se escribía: se conserva la de la base
-      const enBase = await db.registros.get(registro.id);
-      await guardarLocal({ ...registro, captura_inicio: enBase?.captura_inicio ?? null, ubicacion_simulada: enBase?.ubicacion_simulada ?? false });
-    }, 500);
-    return () => clearTimeout(t);
-  }, [registro]);
+    ultimoRegistro.current = registro;
+    sucio.current = true;
+    clearTimeout(temporizador.current);
+    temporizador.current = setTimeout(guardarYa, 500);
+  }, [registro, guardarYa]);
+
+  useEffect(() => {
+    const alOcultar = () => { if (document.visibilityState === 'hidden') guardarYa(); };
+    document.addEventListener('visibilitychange', alOcultar);
+    window.addEventListener('pagehide', guardarYa);
+    return () => {
+      document.removeEventListener('visibilitychange', alOcultar);
+      window.removeEventListener('pagehide', guardarYa);
+      guardarYa();  // al salir de la encuesta
+    };
+  }, [guardarYa]);
 
   const esquema = form?.esquema;
   const secciones = useMemo(() => (esquema && registro ? seccionesVisibles(esquema, registro.datos) : []), [esquema, registro]);
@@ -124,6 +157,10 @@ export function Encuesta({ registroId, onSalir }: { registroId: string; onSalir:
       return;
     }
     setEnviando(true);
+    // Que ningún autoguardado pendiente vuelva a dejarla en borrador después de enviarla
+    await guardarYa();
+    sucio.current = false;
+    cambiado.current = false;
     // Punto de los últimos 2 minutos (la vigilancia lo mantiene fresco) o espera máx. 6 s
     const { punto, simulada } = await tomarEvidencia(6000, 120000);
     const enBase = await db.registros.get(registro.id);
@@ -157,7 +194,7 @@ export function Encuesta({ registroId, onSalir }: { registroId: string; onSalir:
         <button onClick={onSalir} className="rounded-lg p-1 active:bg-white/20" aria-label="Guardar y volver"><ArrowLeft className="h-6 w-6" /></button>
         <div className="min-w-0 flex-1">
           <p className="truncate font-semibold">{String(titulo)}</p>
-          <p className="text-xs opacity-80">{form.icono} {form.nombre} · {paso + 1} de {secciones.length}</p>
+          <p className="text-xs opacity-80">{form.nombre} · {paso + 1} de {secciones.length}</p>
         </div>
       </header>
 
@@ -175,12 +212,13 @@ export function Encuesta({ registroId, onSalir }: { registroId: string; onSalir:
       <div ref={arriba} className="flex-1 overflow-y-auto">
         {soloLectura && (
           <p className="mx-4 mt-4 rounded-xl bg-primary-light px-3 py-2 text-sm text-primary">
-            Esta encuesta ya fue {registro.estado === 'aprobado' ? 'aprobada' : 'revisada'}: solo se puede consultar.
+            {registro.estado === 'aprobado' ? 'Esta encuesta ya fue aprobada' : registro.estado === 'revisado' ? 'Esta encuesta ya fue revisada' : 'Esta encuesta ya se sincronizó'}: solo se puede consultar.
+            Si hay que corregirla, pide a un administrador que la devuelva.
           </p>
         )}
         {registro.estado === 'rechazado' && (
           <p className="mx-4 mt-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">
-            Fue rechazada en la revisión. Corrígela y vuelve a enviarla.
+            Te la devolvieron para corregir. Corrígela y vuelve a enviarla.
           </p>
         )}
         {errores.length > 0 && (
