@@ -1,7 +1,8 @@
 // Inicio: botón de sincronizar y los formularios asignados.
 
 import { useCallback, useEffect, useState } from 'react';
-import { RefreshCw, Settings, CloudUpload, WifiOff, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { RefreshCw, Settings, CloudUpload, WifiOff, CheckCircle2, AlertTriangle, Download } from 'lucide-react';
+import { ENLACE_DESCARGA, versionNueva } from '../lib/actualizacion.ts';
 import { db, contarPendientes, type FormularioLocal } from '../lib/db.ts';
 import { sincronizar, type ResultadoSync } from '../lib/sync.ts';
 import { useSesion } from '../lib/sesion.tsx';
@@ -35,6 +36,8 @@ export function Inicio({ onFormulario, onAjustes }: { onFormulario: (f: Formular
   }, [org]);
 
   useEffect(() => { cargar(); }, [cargar]);
+  const [nueva, setNueva] = useState<string | null>(null);
+  useEffect(() => { versionNueva().then(setNueva); }, []);
   useEffect(() => {
     const on = () => setEnLinea(true), off = () => setEnLinea(false);
     window.addEventListener('online', on);
@@ -71,6 +74,15 @@ export function Inicio({ onFormulario, onAjustes }: { onFormulario: (f: Formular
       </header>
 
       <div className="flex-1 space-y-4 overflow-y-auto p-4">
+        {nueva && (
+          <a href={ENLACE_DESCARGA} target="_blank" rel="noreferrer"
+            className="flex items-center gap-3 rounded-xl border border-primary bg-primary-light px-3 py-3 text-primary">
+            <Download className="h-6 w-6 shrink-0" />
+            <span className="text-sm">
+              <strong>Hay una versión nueva ({nueva}).</strong> Sincroniza primero y luego toca aquí para descargarla e instalarla.
+            </span>
+          </a>
+        )}
         <button className="btn-primario w-full py-4 text-lg" onClick={sincronizarTodo} disabled={sincronizando || !enLinea}>
           {!enLinea ? <><WifiOff className="h-5 w-5" /> Sin señal</> : (
             <><RefreshCw className={`h-5 w-5 ${sincronizando ? 'animate-spin' : ''}`} /> {sincronizando ? 'Sincronizando…' : 'Sincronizar'}</>
