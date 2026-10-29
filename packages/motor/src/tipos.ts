@@ -117,3 +117,10 @@ export type Fila = { [key: string]: Valor };
 export type Valor = string | string[] | Ubicacion | Fila[] | null;
 
 export type Valores = { [key: string]: Valor };
+
+/** Campo que da el título del registro: el elegido en el editor o, si no se eligió,
+ *  el primer campo de texto del formulario (para no mostrar "Sin título"). */
+export function claveTitulo(esquema: Esquema): string {
+  if (esquema.claveNombre) return esquema.claveNombre;
+  return esquema.secciones.flatMap((s) => s.campos).find((c) => c.tipo === 'texto')?.key ?? '';
+}

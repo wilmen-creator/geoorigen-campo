@@ -1,7 +1,7 @@
 // Campos de una encuesta en el celular. Usan el motor compartido para
 // condiciones y cálculos, igual que la vista previa del panel.
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Camera as IconoCamara, ImagePlus, MapPin, Plus, Trash2, X, ChevronDown, ChevronUp } from 'lucide-react';
 import { camposVisibles, type Campo, type Contexto, type Fila, type Ubicacion, type Valor } from '@geoorigen/motor';
 import { tomarPunto } from '../lib/gps.ts';
@@ -124,6 +124,9 @@ function CampoFotos({ campo, valor, onChange, ctx }: { campo: Campo; valor: Valo
 function CampoFirma({ campo, valor, onChange, ctx }: { campo: Campo; valor: Valor; onChange: (v: Valor) => void; ctx: ContextoCampo }) {
   const id = typeof valor === 'string' ? valor : '';
   const [dataUrl, setDataUrl] = useState<string | null>(null);
+  // Cada trazo guarda la firma: en fila, para que el siguiente reemplace al anterior y no queden sobrantes
+  const actual = useRef(id);
+  const cola = useRef<Promise<void>>(Promise.resolve());
   useEffect(() => {
     if (!id) { setDataUrl(''); return; }
     db.archivos.get(id).then((a) => {
@@ -138,9 +141,17 @@ function CampoFirma({ campo, valor, onChange, ctx }: { campo: Campo; valor: Valo
     <SignatureCanvas
       value={dataUrl}
       disabled={ctx.soloLectura}
-      onChange={async (b64) => {
-        if (!b64) { if (id) await borrarArchivo(id); onChange(''); return; }
-        onChange(await guardarFirma({ dataUrl: b64, registroId: ctx.registroId, orgId: ctx.orgId, campoKey: campo.key, anteriorId: id || undefined }));
+      onChange={(b64) => {
+        cola.current = cola.current.then(async () => {
+          const anterior = actual.current;
+          if (!b64) {
+            if (anterior) await borrarArchivo(anterior);
+            actual.current = '';
+          } else {
+            actual.current = await guardarFirma({ dataUrl: b64, registroId: ctx.registroId, orgId: ctx.orgId, campoKey: campo.key, anteriorId: anterior || undefined });
+          }
+          onChange(actual.current);
+        });
       }}
     />
   );

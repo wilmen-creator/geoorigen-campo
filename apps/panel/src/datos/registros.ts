@@ -1,6 +1,6 @@
 // Consulta de registros para la pantalla Datos y conversión de respuestas a texto.
 
-import { evaluarRegla, type Campo, type Esquema, type Regla, type Ubicacion, type Valor, type Valores } from '@geoorigen/motor';
+import { claveTitulo, evaluarRegla, type Campo, type Esquema, type Regla, type Ubicacion, type Valor, type Valores } from '@geoorigen/motor';
 import { supabase } from '../lib/supabase.ts';
 
 export interface RegistroPanel {
@@ -125,7 +125,8 @@ export function camposConValor(esquema: Esquema): Campo[] {
 
 /** Título y subtítulo de un registro según el esquema */
 export function tituloRegistro(r: RegistroPanel, esquema: Esquema | null) {
-  const t = esquema?.claveNombre ? r.datos[esquema.claveNombre] : '';
+  const clave = esquema ? claveTitulo(esquema) : '';
+  const t = clave ? r.datos[clave] : '';
   const s = esquema?.claveSubtitulo ? r.datos[esquema.claveSubtitulo] : '';
   return {
     titulo: typeof t === 'string' && t ? t : 'Sin título',

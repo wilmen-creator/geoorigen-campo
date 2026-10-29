@@ -71,7 +71,9 @@ export function Detalle({ registro, esquemaVersion, estados, puedeCambiarEstado,
         supabase.from('archivos').select('id, campo_key, tipo, origen, storage_path, tomada_en, exif').eq('registro_id', registro.id),
         supabase.from('registros_historial').select('revision, estado, cambiado_en, cambiado_por').eq('registro_id', registro.id).order('revision', { ascending: false }),
       ]);
-      const lista = (as ?? []) as Archivo[];
+      // Solo los que usa la encuesta (versiones anteriores de la app subían firmas reemplazadas)
+      const usados = JSON.stringify(registro.datos);
+      const lista = ((as ?? []) as Archivo[]).filter((a) => usados.includes(a.id));
       if (lista.length) {
         // Enlaces privados de 1 hora: el bucket no es público
         const { data: urls } = await supabase.storage.from('campo-archivos').createSignedUrls(lista.map((a) => a.storage_path), 3600);

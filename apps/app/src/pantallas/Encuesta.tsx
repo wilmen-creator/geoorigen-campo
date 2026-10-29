@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, ChevronLeft, ChevronRight, Send, AlertCircle } from 'lucide-react';
 import {
-  calcularDerivados, camposVisibles, seccionesVisibles, validarRegistro,
+  calcularDerivados, camposVisibles, claveTitulo, seccionesVisibles, validarRegistro,
   type ErrorValidacion, type Valores,
 } from '@geoorigen/motor';
 import { db, guardarLocal, type FormularioLocal, type RegistroLocal } from '../lib/db.ts';
@@ -147,7 +147,8 @@ export function Encuesta({ registroId, onSalir }: { registroId: string; onSalir:
     }
   };
 
-  const titulo = (esquema.claveNombre && typeof registro.datos[esquema.claveNombre] === 'string' && registro.datos[esquema.claveNombre]) || form.nombre;
+  const claveT = claveTitulo(esquema);
+  const titulo = (claveT && typeof registro.datos[claveT] === 'string' && registro.datos[claveT]) || form.nombre;
   const ultimo = paso >= secciones.length - 1;
 
   return (

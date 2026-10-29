@@ -63,19 +63,33 @@ export function SignatureCanvas({ value, onChange, disabled }: Props) {
     }
   }, [expandido]);
 
+  // Tamaño de la pantalla: con el celular vertical el área de firma se dibuja girada
+  // 90°, para que se firme a lo largo y la firma quede siempre horizontal.
+  const [pantalla, setPantalla] = useState({ w: window.innerWidth, h: window.innerHeight });
+  useEffect(() => {
+    const medir = () => setPantalla({ w: window.innerWidth, h: window.innerHeight });
+    window.addEventListener('resize', medir);
+    return () => window.removeEventListener('resize', medir);
+  }, []);
+  const girado = pantalla.h > pantalla.w;
+  // Lado largo y corto disponibles (descontando la barra superior y márgenes), proporción 2:1
+  const largo = (girado ? pantalla.h : pantalla.w) - (girado ? 110 : 24);
+  const corto = (girado ? pantalla.w : pantalla.h) - (girado ? 24 : 110);
+  const anchoFirma = Math.max(200, Math.min(largo, corto * 2));
+
   function getPos(e: React.TouchEvent | React.MouseEvent, canvas: HTMLCanvasElement) {
     const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width  / rect.width;
-    const scaleY = canvas.height / rect.height;
-    if ('touches' in e) {
+    const p = 'touches' in e ? e.touches[0] : (e as React.MouseEvent);
+    if (girado && canvas === modalRef.current) {
+      // Girado 90° a la derecha: el eje x del lienzo baja por la pantalla y el y va hacia la izquierda
       return {
-        x: (e.touches[0].clientX - rect.left) * scaleX,
-        y: (e.touches[0].clientY - rect.top)  * scaleY,
+        x: ((p.clientY - rect.top) / rect.height) * canvas.width,
+        y: ((rect.right - p.clientX) / rect.width) * canvas.height,
       };
     }
     return {
-      x: ((e as React.MouseEvent).clientX - rect.left) * scaleX,
-      y: ((e as React.MouseEvent).clientY - rect.top)  * scaleY,
+      x: ((p.clientX - rect.left) / rect.width) * canvas.width,
+      y: ((p.clientY - rect.top) / rect.height) * canvas.height,
     };
   }
 
@@ -194,8 +208,13 @@ export function SignatureCanvas({ value, onChange, disabled }: Props) {
             </div>
           </div>
           {/* Canvas grande */}
-          <div style={{ flex: 1, background: '#f9fafb', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '12px' }}>
-            <div style={{ background: '#fff', borderRadius: '12px', border: '1.5px solid #d1d5db', width: '100%', height: '100%', overflow: 'hidden' }}>
+          <div style={{ flex: 1, background: '#f9fafb', position: 'relative', overflow: 'hidden' }}>
+            <div style={{
+              position: 'absolute', left: '50%', top: '50%',
+              width: anchoFirma, height: anchoFirma / 2,
+              transform: `translate(-50%, -50%)${girado ? ' rotate(90deg)' : ''}`,
+              background: '#fff', borderRadius: '12px', border: '1.5px solid #d1d5db', overflow: 'hidden',
+            }}>
               <Canvas
                 canvasRef={modalRef}
                 onStart={startDraw(modalRef)}
@@ -208,7 +227,7 @@ export function SignatureCanvas({ value, onChange, disabled }: Props) {
             </div>
           </div>
           <p style={{ textAlign: 'center', fontSize: '0.7rem', color: '#9ca3af', padding: '8px' }}>
-            Gira el teléfono horizontalmente para más espacio
+            {girado ? 'Gira el teléfono y firma a lo largo' : 'Firma dentro del recuadro'}
           </p>
         </div>
       )}

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { ArrowLeft, Plus, CloudUpload, Trash2 } from 'lucide-react';
+import { claveTitulo } from '@geoorigen/motor';
 import { db, type FormularioLocal, type RegistroLocal } from '../lib/db.ts';
 import { borrarArchivo } from '../lib/fotos.ts';
 
@@ -25,7 +26,8 @@ export function Lista({ form, onAbrir, onNueva, onVolver }: {
   useEffect(() => { cargar(); }, [form.id]);
 
   const titulo = (r: RegistroLocal) => {
-    const t = form.esquema.claveNombre ? r.datos[form.esquema.claveNombre] : '';
+    const clave = claveTitulo(form.esquema);
+    const t = clave ? r.datos[clave] : '';
     return typeof t === 'string' && t ? t : 'Sin nombre todavía';
   };
   const subtitulo = (r: RegistroLocal) => {

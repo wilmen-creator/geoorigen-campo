@@ -70,6 +70,11 @@ async function subirArchivos(orgId: string, res: ResultadoSync) {
   for (const a of pendientes) {
     const reg = await db.registros.get(a.registro_id);
     if (!reg?.en_servidor) continue;  // primero debe existir la encuesta en el servidor
+    // Foto quitada o firma reemplazada: ya no la usa la encuesta, no se sube
+    if (!JSON.stringify(reg.datos).includes(a.id)) {
+      await db.archivos.delete(a.id);
+      continue;
+    }
     const ext = a.mime.split('/')[1] === 'jpeg' ? 'jpg' : a.mime.split('/')[1];
     const ruta = `${a.org_id}/${a.registro_id}/${a.id}.${ext}`;
     const { error: e1 } = await supabase.storage.from('campo-archivos').upload(ruta, a.datos, { contentType: a.mime, upsert: false });
