@@ -9,7 +9,7 @@ import {
   type ErrorValidacion, type Valores,
 } from '@geoorigen/motor';
 import { db, guardarLocal, type FormularioLocal, type RegistroLocal } from '../lib/db.ts';
-import { datosDispositivo, tomarEvidencia } from '../lib/gps.ts';
+import { datosDispositivo, tomarEvidencia, vigilarGPS } from '../lib/gps.ts';
 import { CampoApp, type ContextoCampo } from './Campos.tsx';
 
 const BLOQUEADOS = ['revisado', 'aprobado'];
@@ -55,7 +55,7 @@ export function Encuesta({ registroId, onSalir }: { registroId: string; onSalir:
     const intentar = async (n: number) => {
       const r = await db.registros.get(registroId);
       if (!activo || !r || r.captura_inicio || r.en_servidor || n > 4) return;
-      const { punto, simulada } = await tomarEvidencia();
+      const { punto, simulada } = await tomarEvidencia(20000, 60000);
       if (punto && activo) {
         await db.registros.update(registroId, { captura_inicio: punto, ubicacion_simulada: r.ubicacion_simulada || simulada });
       } else if (activo) {
@@ -65,6 +65,9 @@ export function Encuesta({ registroId, onSalir }: { registroId: string; onSalir:
     const t = setTimeout(() => intentar(1), 25000);  // después del primer intento de nuevaEncuesta
     return () => { activo = false; clearTimeout(t); };
   }, [registroId]);
+
+  // GPS encendido mientras la encuesta está abierta
+  useEffect(() => vigilarGPS(), []);
 
   const soloLectura = registro ? BLOQUEADOS.includes(registro.estado) : true;
 
@@ -121,7 +124,8 @@ export function Encuesta({ registroId, onSalir }: { registroId: string; onSalir:
       return;
     }
     setEnviando(true);
-    const { punto, simulada } = await tomarEvidencia();
+    // Punto de los últimos 2 minutos (la vigilancia lo mantiene fresco) o espera máx. 6 s
+    const { punto, simulada } = await tomarEvidencia(6000, 120000);
     const enBase = await db.registros.get(registro.id);
     await guardarLocal({
       ...registro,
@@ -133,6 +137,14 @@ export function Encuesta({ registroId, onSalir }: { registroId: string; onSalir:
     });
     setEnviando(false);
     onSalir();
+    // Sin punto de fin: se sigue buscando en segundo plano hasta 2 minutos (si aún no se subió)
+    if (!enBase?.captura_fin && !punto) {
+      tomarEvidencia(120000).then(async (ev) => {
+        const r = await db.registros.get(registro.id);
+        if (!ev.punto || !r || r.captura_fin || r.en_servidor) return;
+        await db.registros.update(registro.id, { captura_fin: ev.punto, ubicacion_simulada: r.ubicacion_simulada || ev.simulada });
+      });
+    }
   };
 
   const titulo = (esquema.claveNombre && typeof registro.datos[esquema.claveNombre] === 'string' && registro.datos[esquema.claveNombre]) || form.nombre;

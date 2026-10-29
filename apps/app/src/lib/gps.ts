@@ -15,17 +15,50 @@ const Veracidad = registerPlugin<PluginVeracidad>('Veracidad', {
   web: { ubicacionSimulada: async () => ({ simulada: false }) },
 });
 
-/** Pide una ubicación precisa. Devuelve null si no hay permiso o no se pudo en el tiempo dado. */
-export async function tomarPunto(timeout = 20000): Promise<PuntoGPS | null> {
+const aPunto = (p: { coords: { latitude: number; longitude: number; accuracy: number }; timestamp: number }): PuntoGPS => ({
+  lat: p.coords.latitude,
+  lon: p.coords.longitude,
+  precision: Math.round(p.coords.accuracy * 10) / 10,
+  // p.timestamp es la hora del GPS, no la del reloj del celular
+  en: new Date(p.timestamp).toISOString(),
+});
+
+/** Pide el permiso de ubicación al entrar, no a mitad de una encuesta */
+export async function pedirPermisoUbicacion() {
+  if (!Capacitor.isNativePlatform()) return;
   try {
-    const p = await Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout, maximumAge: 0 });
-    return {
-      lat: p.coords.latitude,
-      lon: p.coords.longitude,
-      precision: Math.round(p.coords.accuracy * 10) / 10,
-      // p.timestamp es la hora del GPS, no la del reloj del celular
-      en: new Date(p.timestamp).toISOString(),
-    };
+    const p = await Geolocation.checkPermissions();
+    if (p.location !== 'granted') await Geolocation.requestPermissions({ permissions: ['location'] });
+  } catch { /* el GPS del celular está apagado: se reintenta al capturar */ }
+}
+
+// Último punto visto mientras una encuesta está abierta: así enviar o tomar una
+// foto no espera al GPS (sin señal puede tardar 20 s o más).
+let ultimo: PuntoGPS | null = null;
+let vigilancia: string | null = null;
+
+/** Mantiene el GPS encendido mientras la encuesta está abierta. Devuelve la función para apagarlo. */
+export function vigilarGPS(): () => void {
+  let apagado = false;
+  Geolocation.watchPosition({ enableHighAccuracy: true, maximumAge: 0 }, (p) => {
+    if (p) ultimo = aPunto(p);
+  }).then((id) => {
+    if (apagado) Geolocation.clearWatch({ id });
+    else vigilancia = id;
+  }).catch(() => { /* sin permiso: se usa tomarPunto */ });
+  return () => {
+    apagado = true;
+    if (vigilancia) Geolocation.clearWatch({ id: vigilancia });
+    vigilancia = null;
+  };
+}
+
+/** Pide una ubicación precisa. Usa la de la vigilancia si tiene menos de `edadMax` ms.
+ *  Devuelve null si no hay permiso o no se pudo en el tiempo dado. */
+export async function tomarPunto(timeout = 20000, edadMax = 0): Promise<PuntoGPS | null> {
+  if (ultimo && edadMax > 0 && Date.now() - new Date(ultimo.en).getTime() < edadMax) return ultimo;
+  try {
+    return aPunto(await Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout, maximumAge: edadMax }));
   } catch {
     return null;
   }
@@ -40,8 +73,8 @@ export async function ubicacionSimulada(): Promise<boolean> {
 }
 
 /** Evidencia de captura: punto + ¿simulado? Se llama al abrir y al enviar una encuesta. */
-export async function tomarEvidencia(): Promise<{ punto: PuntoGPS | null; simulada: boolean }> {
-  const punto = await tomarPunto();
+export async function tomarEvidencia(timeout = 20000, edadMax = 0): Promise<{ punto: PuntoGPS | null; simulada: boolean }> {
+  const punto = await tomarPunto(timeout, edadMax);
   const simulada = punto ? await ubicacionSimulada() : false;
   return { punto, simulada };
 }

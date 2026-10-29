@@ -66,7 +66,7 @@ export async function tomarFoto(opciones: {
     lon = gradosExif(exif.GPSLongitude, exif.GPSLongitudeRef);
     tomada = fechaExif(exif.DateTimeOriginal ?? exif.DateTime);
   } else {
-    const p = await tomarPunto(8000);
+    const p = await tomarPunto(5000, 60000);  // punto del último minuto o espera máx. 5 s
     if (p) { lat = p.lat; lon = p.lon; precision = p.precision; }
     tomada = new Date().toISOString();
   }

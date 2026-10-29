@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { pedirPermisoUbicacion } from './lib/gps.ts';
 import { ProveedorSesion, useSesion } from './lib/sesion.tsx';
 import { configurado } from './lib/supabase.ts';
 import { type FormularioLocal } from './lib/db.ts';
@@ -17,6 +18,8 @@ type Vista =
 function Pantallas() {
   const { sesion, cargando, org } = useSesion();
   const [vista, setVista] = useState<Vista>({ tipo: 'inicio' });
+
+  useEffect(() => { if (sesion) pedirPermisoUbicacion(); }, [sesion]);
 
   if (!configurado) {
     return <p className="p-6 text-center text-gray-600">Esta versión de la app no trae la conexión al servidor. Pide un APK actualizado.</p>;
