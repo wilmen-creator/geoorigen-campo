@@ -5,7 +5,7 @@ import { ClipboardList, Users, Table2, LayoutDashboard, LogOut, Building2 } from
 import { useSesion } from '../lib/sesion.tsx';
 
 const MODULOS = [
-  { a: '/tablero', texto: 'Tablero', icono: LayoutDashboard, listo: false },
+  { a: '/tablero', texto: 'Tablero', icono: LayoutDashboard, listo: true },
   { a: '/datos', texto: 'Datos', icono: Table2, listo: true },
   { a: '/formularios', texto: 'Formularios', icono: ClipboardList, listo: true },
   { a: '/equipo', texto: 'Equipo', icono: Users, listo: true },

@@ -1,13 +1,13 @@
 // Pantalla Datos: tabla + mapa sincronizados, filtros estilo Fulcrum y exportación.
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Search, Download, Map as MapIcon, Table2, Columns2, Plus, X, AlertTriangle, SlidersHorizontal, RefreshCw } from 'lucide-react';
+import { Search, Download, Map as MapIcon, Table2, Columns2, Plus, X, AlertTriangle, SlidersHorizontal, RefreshCw, Trash2, RotateCcw } from 'lucide-react';
 import type { Esquema, Operador } from '@geoorigen/motor';
 import { supabase, mensajeError } from '../lib/supabase.ts';
 import { useSesion } from '../lib/sesion.tsx';
 import { OPERADORES } from '../editor/catalogo.ts';
 import {
-  ALERTAS, FILTROS_VACIOS, LIMITE, camposConValor, consultarRegistros, tituloRegistro, valorComoTexto,
+  ALERTAS, FILTROS_VACIOS, LIMITE, borrarDefinitivo, camposConValor, consultarRegistros, marcarEliminados, tituloRegistro, valorComoTexto,
   type Filtros, type RegistroPanel,
 } from './registros.ts';
 import { Mapa, COLOR_ESTADO } from './Mapa.tsx';
@@ -28,6 +28,9 @@ export function Datos() {
   const { org } = useSesion();
   const conControl = org?.rol === 'admin' || org?.rol === 'editor' || org?.rol === 'lector';
   const puedeCambiarEstado = (org?.rol === 'admin' || org?.rol === 'editor') && !org?.expira_en;
+  // Eliminar a la papelera: admin y editor. Borrar para siempre: solo admin.
+  const puedeEliminar = puedeCambiarEstado;
+  const puedeBorrarDefinitivo = org?.rol === 'admin' && !org?.expira_en;
 
   const [formularios, setFormularios] = useState<FormularioPublicado[]>([]);
   const [cargandoForms, setCargandoForms] = useState(true);
@@ -47,6 +50,8 @@ export function Datos() {
   const [verColumnas, setVerColumnas] = useState(false);
   const [verReglas, setVerReglas] = useState(false);
   const [verExportar, setVerExportar] = useState(false);
+  const [marcados, setMarcados] = useState<Set<string>>(new Set());
+  const [trabajando, setTrabajando] = useState(false);
 
   const form = formularios.find((f) => f.id === formId);
   const esquema = form ? esquemas.get(`${form.id}@${form.version_actual}`) ?? null : null;
@@ -102,6 +107,7 @@ export function Datos() {
       setFilas(r.filas);
       setRecortado(r.recortado);
       setPagina(0);
+      setMarcados(new Set());
     } catch (e) {
       setError(mensajeError(e as Error));
     }
@@ -133,6 +139,38 @@ export function Datos() {
     const nuevas = columnas.includes(k) ? columnas.filter((c) => c !== k) : [...columnas, k];
     setColumnas(nuevas);
     if (form) guardar(`geoorigen.datos.cols.${form.id}`, JSON.stringify(nuevas));
+  };
+
+  const marcar = (id: string) => setMarcados((m) => { const n = new Set(m); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const todosVisiblesMarcados = visibles.length > 0 && visibles.every((r) => marcados.has(r.id));
+  const marcarVisibles = () => setMarcados((m) => {
+    const n = new Set(m);
+    visibles.forEach((r) => (todosVisiblesMarcados ? n.delete(r.id) : n.add(r.id)));
+    return n;
+  });
+
+  /** Eliminar / restaurar / borrar definitivo sobre los registros marcados */
+  const accion = async (tipo: 'eliminar' | 'restaurar' | 'borrar', ids = [...marcados]) => {
+    if (!ids.length) return;
+    const n = ids.length;
+    const pregunta = {
+      eliminar: `¿Eliminar ${n} registro(s)? Pasan a la papelera y se pueden restaurar. También desaparecen del celular del técnico.`,
+      restaurar: `¿Restaurar ${n} registro(s)?`,
+      borrar: `¿Borrar DEFINITIVAMENTE ${n} registro(s) con sus fotos, firmas e historial?\n\nEsto NO se puede deshacer.`,
+    }[tipo];
+    if (!confirm(pregunta)) return;
+    if (tipo === 'borrar' && prompt('Para confirmar, escribe BORRAR') !== 'BORRAR') return;
+    setTrabajando(true);
+    setError('');
+    try {
+      if (tipo === 'borrar') await borrarDefinitivo(ids);
+      else await marcarEliminados(ids, tipo === 'eliminar');
+      setSel(null);
+      await consultar();
+    } catch (e) {
+      setError(mensajeError(e as Error));
+    }
+    setTrabajando(false);
   };
 
   const exportar = async (tipo: 'xlsx' | 'csv' | 'kml' | 'geojson') => {
@@ -222,6 +260,12 @@ export function Datos() {
                 {Object.entries(ALERTAS).map(([k, a]) => <option key={k} value={k}>⚠ {a.texto}</option>)}
               </select>
             )}
+            {puedeEliminar && (
+              <button className={`btn-secondary h-8 px-2 ${filtros.papelera ? 'border-red-300 bg-red-50 text-red-700' : ''}`}
+                onClick={() => { setSel(null); setFiltro({ papelera: !filtros.papelera }); }}>
+                <Trash2 className="h-4 w-4" /> {filtros.papelera ? 'Salir de la papelera' : 'Papelera'}
+              </button>
+            )}
             <button className={`btn-secondary h-8 px-2 ${filtros.reglas.length ? 'border-primary text-primary' : ''}`} onClick={() => setVerReglas((v) => !v)}>
               <SlidersHorizontal className="h-4 w-4" /> Por pregunta{filtros.reglas.length ? ` (${filtros.reglas.length})` : ''}
             </button>
@@ -267,6 +311,36 @@ export function Datos() {
             </div>
           )}
 
+          {filtros.papelera && (
+            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+              Estás viendo la <strong>papelera</strong>: registros eliminados. Puedes restaurarlos
+              {puedeBorrarDefinitivo ? ' o borrarlos para siempre' : ''}.
+            </p>
+          )}
+          {marcados.size > 0 && (
+            <div className="flex flex-wrap items-center gap-2 rounded-lg bg-geo-gray px-3 py-2 text-sm">
+              <span className="font-medium">{marcados.size} marcado(s)</span>
+              {!filtros.papelera ? (
+                <button className="btn-secondary h-8 border-red-200 px-2 text-red-700" disabled={trabajando} onClick={() => accion('eliminar')}>
+                  <Trash2 className="h-4 w-4" /> Eliminar
+                </button>
+              ) : (
+                <>
+                  <button className="btn-secondary h-8 px-2" disabled={trabajando} onClick={() => accion('restaurar')}>
+                    <RotateCcw className="h-4 w-4" /> Restaurar
+                  </button>
+                  {puedeBorrarDefinitivo && (
+                    <button className="btn-secondary h-8 border-red-300 px-2 text-red-700" disabled={trabajando} onClick={() => accion('borrar')}>
+                      <Trash2 className="h-4 w-4" /> Borrar definitivamente
+                    </button>
+                  )}
+                </>
+              )}
+              <button className="text-xs text-gray-500 hover:underline" onClick={() => setMarcados(new Set())}>Quitar marcas</button>
+              {trabajando && <span className="text-xs text-gray-500">Procesando…</span>}
+            </div>
+          )}
+
           <p className="text-xs text-gray-500">
             {cargando ? 'Cargando…' : `${filas.length} registro(s)`}
             {conControl && conAlertas > 0 && <span className="ml-2 text-red-600">· {conAlertas} con alertas</span>}
@@ -283,6 +357,12 @@ export function Datos() {
                 <table className="w-full text-sm">
                   <thead className="sticky top-0 z-10 bg-white text-left text-xs text-gray-400 shadow-sm">
                     <tr>
+                      {puedeEliminar && (
+                        <th className="w-8 px-3 py-2">
+                          <input type="checkbox" className="accent-primary" title="Marcar los de esta página"
+                            checked={todosVisiblesMarcados} onChange={marcarVisibles} />
+                        </th>
+                      )}
                       <th className="px-3 py-2 font-medium">Registro</th>
                       <th className="px-3 py-2 font-medium">Técnico</th>
                       <th className="px-3 py-2 font-medium">Fecha</th>
@@ -311,6 +391,11 @@ export function Datos() {
                       return (
                         <tr key={r.id} onClick={() => setSel(r.id)}
                           className={`cursor-pointer ${sel === r.id ? 'bg-primary-light' : 'hover:bg-geo-gray'}`}>
+                          {puedeEliminar && (
+                            <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                              <input type="checkbox" className="accent-primary" checked={marcados.has(r.id)} onChange={() => marcar(r.id)} />
+                            </td>
+                          )}
                           <td className="min-w-56 px-3 py-2"><p className="font-medium">{titulo}</p>{subtitulo && <p className="text-xs text-gray-400">{subtitulo}</p>}</td>
                           <td className="px-3 py-2 whitespace-nowrap">{r.tecnico_nombre || r.tecnico_email}</td>
                           <td className="px-3 py-2 whitespace-nowrap text-gray-500">{fechaCorta(r.captura_inicio_en ?? r.creado_en)}</td>
@@ -361,7 +446,9 @@ export function Datos() {
             registro={registroSel}
             esquemaVersion={esquemas.get(`${registroSel.formulario_id}@${registroSel.formulario_version}`) ?? null}
             estados={form?.estados ?? []}
-            puedeCambiarEstado={puedeCambiarEstado}
+            puedeCambiarEstado={puedeCambiarEstado && !filtros.papelera}
+            enPapelera={!!filtros.papelera}
+            onEliminar={puedeEliminar ? () => accion(filtros.papelera ? 'restaurar' : 'eliminar', [registroSel.id]) : undefined}
             onCerrar={() => setSel(null)}
             onCambio={consultar}
           />

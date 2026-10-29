@@ -51,7 +51,10 @@ function Respuesta({ campo, valor }: { campo: Campo; valor: unknown }) {
   );
 }
 
-export function Detalle({ registro, esquemaVersion, estados, puedeCambiarEstado, onCerrar, onCambio }: {
+export function Detalle({ registro, esquemaVersion, estados, puedeCambiarEstado, enPapelera, onEliminar, onCerrar, onCambio }: {
+  enPapelera?: boolean;
+  /** Eliminar (o restaurar, en la papelera) este registro */
+  onEliminar?: () => void;
   registro: RegistroPanel;
   /** Esquema de la versión con la que se capturó este registro */
   esquemaVersion: Esquema | null;
@@ -134,6 +137,11 @@ export function Detalle({ registro, esquemaVersion, estados, puedeCambiarEstado,
         )}
         {registro.estado === 'rechazado' && (
           <p className="text-xs text-gray-500">El técnico puede corregirla en la app. Al reenviarla vuelve a quedar bloqueada.</p>
+        )}
+        {onEliminar && (
+          <button className={`btn-secondary w-full text-sm ${enPapelera ? '' : 'text-red-700'}`} onClick={onEliminar}>
+            {enPapelera ? 'Restaurar este registro' : 'Eliminar este registro'}
+          </button>
         )}
         {esquemaVersion && tieneDatosQR(esquemaVersion) && (
           <button className="btn-secondary w-full text-sm" onClick={() => setVerQR(true)}>

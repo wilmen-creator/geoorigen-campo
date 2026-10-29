@@ -44,6 +44,8 @@ export interface Filtros {
   alerta: string;
   /** Filtros por pregunta del formulario, como en Fulcrum */
   reglas: Regla[];
+  /** Ver los eliminados (papelera) en vez de los vigentes */
+  papelera?: boolean;
 }
 
 export const FILTROS_VACIOS: Filtros = { tecnico: '', estado: '', desde: '', hasta: '', buscar: '', alerta: '', reglas: [] };
@@ -66,7 +68,7 @@ export function normalizar(t: string): string {
 
 export async function consultarRegistros(orgId: string, formularioId: string, f: Filtros) {
   let q = supabase.from('registros_panel').select('*')
-    .eq('org_id', orgId).eq('formulario_id', formularioId).eq('eliminado', false);
+    .eq('org_id', orgId).eq('formulario_id', formularioId).eq('eliminado', !!f.papelera);
   if (f.tecnico) q = q.eq('creado_por', f.tecnico);
   if (f.estado) q = q.eq('estado', f.estado);
   if (f.desde) q = q.gte('creado_en', `${f.desde}T00:00:00`);
@@ -135,4 +137,33 @@ export function tituloRegistro(r: RegistroPanel, esquema: Esquema | null) {
     titulo: typeof t === 'string' && t ? t : 'Sin título',
     subtitulo: typeof s === 'string' ? s : '',
   };
+}
+
+// ── Eliminar, restaurar y borrar definitivamente ──────────────────────────────
+
+/** De a 100 para no armar direcciones demasiado largas */
+const enTandas = <T,>(lista: T[], n = 100) => Array.from({ length: Math.ceil(lista.length / n) }, (_, i) => lista.slice(i * n, i * n + n));
+
+/** Eliminar (a la papelera) o restaurar: solo cambia la marca, todo se puede recuperar */
+export async function marcarEliminados(ids: string[], eliminado: boolean) {
+  for (const tanda of enTandas(ids)) {
+    const { error } = await supabase.from('registros').update({ eliminado }).in('id', tanda);
+    if (error) throw error;
+  }
+}
+
+/** Borra para siempre registros que ya están en la papelera, con sus fotos y su historial */
+export async function borrarDefinitivo(ids: string[]) {
+  for (const tanda of enTandas(ids)) {
+    const { data: archivos, error: e1 } = await supabase.from('archivos').select('storage_path').in('registro_id', tanda);
+    if (e1) throw e1;
+    const rutas = (archivos ?? []).map((a) => a.storage_path);
+    for (const grupo of enTandas(rutas)) {
+      const { error } = await supabase.storage.from('campo-archivos').remove(grupo);
+      if (error) throw error;
+    }
+    // Las fichas de fotos, el historial y el control se borran en cascada
+    const { error: e2 } = await supabase.from('registros').delete().in('id', tanda).eq('eliminado', true);
+    if (e2) throw e2;
+  }
 }
