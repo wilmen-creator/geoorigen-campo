@@ -1,8 +1,8 @@
 // Estructura del panel: barra lateral con módulos y organización activa.
 
 import { NavLink, Outlet } from 'react-router';
-import { ClipboardList, Users, Table2, LayoutDashboard, LogOut, Building2 } from 'lucide-react';
-import { useSesion } from '../lib/sesion.tsx';
+import { ClipboardList, Users, Table2, LayoutDashboard, LogOut, Building2, Globe2, AlertTriangle } from 'lucide-react';
+import { useSesion, estadoLicencia } from '../lib/sesion.tsx';
 
 const MODULOS = [
   { a: '/tablero', texto: 'Tablero', icono: LayoutDashboard, listo: true },
@@ -16,7 +16,9 @@ const ROLES: Record<string, string> = {
 };
 
 export function Marco() {
-  const { sesion, org, membresias, elegirOrg, salir } = useSesion();
+  const { sesion, org, membresias, elegirOrg, salir, esPlataformaAdmin } = useSesion();
+  const licencia = org ? estadoLicencia(org.organizacion) : null;
+  const modulos = esPlataformaAdmin ? [...MODULOS, { a: '/plataforma', texto: 'Plataforma', icono: Globe2, listo: true }] : MODULOS;
 
   return (
     <div className="flex h-full">
@@ -48,7 +50,7 @@ export function Marco() {
         </div>
 
         <nav className="flex-1 space-y-0.5 p-2">
-          {MODULOS.map(({ a, texto, icono: Icono, listo }) =>
+          {modulos.map(({ a, texto, icono: Icono, listo }) =>
             listo ? (
               <NavLink
                 key={a}
@@ -80,8 +82,15 @@ export function Marco() {
         </div>
       </aside>
 
-      <main className="min-w-0 flex-1 overflow-hidden">
-        <Outlet />
+      <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        {licencia?.texto && (
+          <p className={`flex items-center gap-2 px-4 py-2 text-sm ${licencia.vigente ? 'bg-amber-50 text-amber-800' : 'bg-red-50 text-red-700'}`}>
+            <AlertTriangle className="h-4 w-4 shrink-0" /> {licencia.texto}
+          </p>
+        )}
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <Outlet />
+        </div>
       </main>
     </div>
   );

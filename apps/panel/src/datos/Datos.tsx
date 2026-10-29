@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Search, Download, Map as MapIcon, Table2, Columns2, Plus, X, AlertTriangle, SlidersHorizontal, RefreshCw, Trash2, RotateCcw } from 'lucide-react';
 import type { Esquema, Operador } from '@geoorigen/motor';
 import { supabase, mensajeError } from '../lib/supabase.ts';
-import { useSesion } from '../lib/sesion.tsx';
+import { useSesion, puedeExportar } from '../lib/sesion.tsx';
 import { OPERADORES } from '../editor/catalogo.ts';
 import {
   ALERTAS, FILTROS_VACIOS, LIMITE, borrarDefinitivo, camposConValor, consultarRegistros, marcarEliminados, tituloRegistro, valorComoTexto,
@@ -26,6 +26,7 @@ const fechaCorta = (t: string) => new Date(t).toLocaleString('es-CO', { day: '2-
 
 export function Datos() {
   const { org } = useSesion();
+  const exportacion = puedeExportar(org);
   const conControl = org?.rol === 'admin' || org?.rol === 'editor' || org?.rol === 'lector';
   const puedeCambiarEstado = (org?.rol === 'admin' || org?.rol === 'editor') && !org?.expira_en;
   // Eliminar a la papelera: admin y editor. Borrar para siempre: solo admin.
@@ -175,7 +176,7 @@ export function Datos() {
 
   const exportar = async (tipo: 'xlsx' | 'csv' | 'kml' | 'geojson') => {
     setVerExportar(false);
-    if (!esquema || !form) return;
+    if (!esquema || !form || !exportacion.si) return;
     if (tipo === 'xlsx') await exportarExcel(filas, esquema, form.nombre, conControl);
     if (tipo === 'csv') exportarCSV(filas, esquema, form.nombre, conControl);
     if (tipo === 'kml') exportarKML(filas, esquema, form.nombre);
@@ -222,7 +223,8 @@ export function Datos() {
             </div>
             <button className="btn-icon" title="Actualizar" onClick={consultar}><RefreshCw className={`h-4 w-4 ${cargando ? 'animate-spin' : ''}`} /></button>
             <div className="relative">
-              <button className="btn-primary h-9 px-3" onClick={() => setVerExportar((v) => !v)} disabled={!filas.length}>
+              <button className="btn-primary h-9 px-3" onClick={() => setVerExportar((v) => !v)} disabled={!filas.length || !exportacion.si}
+                title={exportacion.motivo}>
                 <Download className="h-4 w-4" /> Exportar
               </button>
               {verExportar && (
@@ -311,6 +313,9 @@ export function Datos() {
             </div>
           )}
 
+          {!exportacion.si && exportacion.motivo && (
+            <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">{exportacion.motivo}</p>
+          )}
           {filtros.papelera && (
             <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
               Estás viendo la <strong>papelera</strong>: registros eliminados. Puedes restaurarlos

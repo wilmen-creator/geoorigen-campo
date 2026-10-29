@@ -32,6 +32,8 @@ export function mensajeError(e: { message?: string } | null | undefined): string
   const m = e?.message ?? 'Error desconocido';
   if (m.includes('Invalid login credentials')) return 'Usuario o contraseña incorrectos';
   if (m.includes('Failed to fetch') || m.includes('NetworkError')) return 'Sin conexión con el servidor';
+  // Avisos de licencia y cupo que manda el servidor: se muestran sin el código
+  if (/^(LICENCIA|LIMITE_USUARIOS):/.test(m)) return m.replace(/^\w+:\s*/, '');
   if (/abort|timeout|timed out/i.test(m)) return 'La señal está muy lenta: se intentará en la próxima sincronización';
   return m;
 }

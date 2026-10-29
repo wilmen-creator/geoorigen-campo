@@ -7,11 +7,12 @@ import { Formularios } from './paginas/Formularios.tsx';
 import { Equipo } from './paginas/Equipo.tsx';
 import { Datos } from './datos/Datos.tsx';
 import { Tablero } from './tablero/Tablero.tsx';
+import { Plataforma } from './paginas/Plataforma.tsx';
 import { EditorFormulario } from './editor/EditorFormulario.tsx';
 import { Marco } from './componentes/Marco.tsx';
 
 function Rutas() {
-  const { sesion, cargando, recuperando, membresias, org } = useSesion();
+  const { sesion, cargando, recuperando, membresias, org, esPlataformaAdmin } = useSesion();
 
   if (!configurado) return <SinConfigurar />;
   if (cargando) {
@@ -34,6 +35,7 @@ function Rutas() {
         <Route path="/formularios/:id" element={<EditorFormulario />} />
         <Route path="/equipo" element={<Equipo />} />
         <Route path="/tablero" element={<Tablero />} />
+        {esPlataformaAdmin && <Route path="/plataforma" element={<Plataforma />} />}
         <Route path="/datos" element={<Datos />} />
         <Route path="*" element={<Navigate to="/formularios" replace />} />
       </Route>

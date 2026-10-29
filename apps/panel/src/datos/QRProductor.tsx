@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import { X, Download, Printer } from 'lucide-react';
 import { armarQR, leerQR, type Esquema, type Valores } from '@geoorigen/motor';
+import { useSesion, puedeExportar } from '../lib/sesion.tsx';
 
 /** Imagen para compartir o imprimir: el QR con el nombre y la finca debajo */
 async function dibujar(canvas: HTMLCanvasElement, texto: string, lineas: string[]) {
@@ -30,6 +31,7 @@ export function QRProductor({ esquema, datos, orgId, registroId, onCerrar }: {
   esquema: Esquema; datos: Valores; orgId: string; registroId: string; onCerrar: () => void;
 }) {
   const lienzo = useRef<HTMLCanvasElement>(null);
+  const exportacion = puedeExportar(useSesion().org);
   const [error, setError] = useState('');
   const texto = armarQR(esquema, datos, orgId, registroId);
   const d = texto ? leerQR(texto)!.d : {};
@@ -77,6 +79,7 @@ export function QRProductor({ esquema, datos, orgId, registroId, onCerrar }: {
           <>
             <canvas ref={lienzo} className="w-full rounded-lg border border-gray-100" />
             {error && <p className="mt-2 text-sm text-red-700">{error}</p>}
+            {!exportacion.si && <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">{exportacion.motivo}</p>}
             {!d.ubicacion && (
               <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
                 Esta encuesta no tiene la ubicación de la finca: el QR no la llevará.
@@ -87,8 +90,8 @@ export function QRProductor({ esquema, datos, orgId, registroId, onCerrar }: {
               Se puede imprimir o enviar como foto: la app lo lee también desde la pantalla de otro celular.
             </p>
             <div className="mt-4 flex gap-2">
-              <button className="btn-secondary flex-1" onClick={descargar}><Download className="h-4 w-4" /> Descargar</button>
-              <button className="btn-primary flex-1" onClick={imprimir}><Printer className="h-4 w-4" /> Imprimir</button>
+              <button className="btn-secondary flex-1" onClick={descargar} disabled={!exportacion.si} title={exportacion.motivo}><Download className="h-4 w-4" /> Descargar</button>
+              <button className="btn-primary flex-1" onClick={imprimir} disabled={!exportacion.si} title={exportacion.motivo}><Printer className="h-4 w-4" /> Imprimir</button>
             </div>
           </>
         )}

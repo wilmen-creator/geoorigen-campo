@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { UserPlus, KeyRound, ClipboardList, UserX, X, Power, ShieldAlert } from 'lucide-react';
 import { supabase, mensajeError } from '../lib/supabase.ts';
-import { useSesion, type Rol } from '../lib/sesion.tsx';
+import { useSesion, estadoLicencia, type Rol } from '../lib/sesion.tsx';
 
 const DOMINIO_SIN_CORREO = 'sin-correo.geoorigen.com';
 
@@ -71,13 +71,16 @@ function Modal({ titulo, onCerrar, children }: { titulo: string; onCerrar: () =>
 
 // ── Invitar ───────────────────────────────────────────────────────────────────
 
-function Invitar({ orgId, onListo, onCerrar }: { orgId: string; onListo: (aviso: string) => void; onCerrar: () => void }) {
+/** primerAdmin: GeoOrigen crea el primer administrador de una organización nueva (rol fijo) */
+export function Invitar({ orgId, onListo, onCerrar, primerAdmin = false }: {
+  orgId: string; onListo: (aviso: string) => void; onCerrar: () => void; primerAdmin?: boolean;
+}) {
   const [nombre, setNombre] = useState('');
   const [modo, setModo] = useState<'correo' | 'clave' | 'usuario'>('correo');
   const [correo, setCorreo] = useState('');
   const [usuario, setUsuario] = useState('');
   const [clave, setClave] = useState('');
-  const [rol, setRol] = useState<Rol>('colaborador');
+  const [rol, setRol] = useState<Rol>(primerAdmin ? 'admin' : 'colaborador');
   const [error, setError] = useState('');
   const [enviando, setEnviando] = useState(false);
 
@@ -87,7 +90,7 @@ function Invitar({ orgId, onListo, onCerrar }: { orgId: string; onListo: (aviso:
     setEnviando(true);
     try {
       const r = await llamarFuncion({
-        accion: 'invitar', org_id: orgId, rol, nombre,
+        accion: primerAdmin ? 'primer_admin' : 'invitar', org_id: orgId, rol, nombre,
         ...(modo === 'usuario' ? { usuario, password: clave } : { email: correo }),
         ...(modo === 'clave' ? { password: clave } : {}),
       });
@@ -103,7 +106,7 @@ function Invitar({ orgId, onListo, onCerrar }: { orgId: string; onListo: (aviso:
   };
 
   return (
-    <Modal titulo="Agregar persona" onCerrar={onCerrar}>
+    <Modal titulo={primerAdmin ? 'Administrador de la organización' : 'Agregar persona'} onCerrar={onCerrar}>
       <form onSubmit={enviar} className="space-y-3">
         <div>
           <label className="label">Nombre completo</label>
@@ -147,6 +150,12 @@ function Invitar({ orgId, onListo, onCerrar }: { orgId: string; onListo: (aviso:
           </div>
         )}
 
+        {primerAdmin ? (
+          <p className="rounded-lg bg-primary-light px-3 py-2 text-xs text-primary">
+            Será el <strong>administrador</strong> de la asociación: arma sus formularios y agrega a su equipo.
+            Debe ser una persona de la asociación; GeoOrigen no queda con acceso a sus datos.
+          </p>
+        ) : (
         <div>
           <label className="label">Rol</label>
           <div className="space-y-1">
@@ -161,6 +170,7 @@ function Invitar({ orgId, onListo, onCerrar }: { orgId: string; onListo: (aviso:
             ))}
           </div>
         </div>
+        )}
 
         {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
         <button className="btn-primary w-full" disabled={enviando}>{enviando ? 'Agregando…' : 'Agregar al equipo'}</button>
@@ -288,6 +298,8 @@ function Asignaciones({ miembro, formularios, onListo, onCerrar }: {
 export function Equipo() {
   const { org, sesion } = useSesion();
   const esAdmin = org?.rol === 'admin' && !org.expira_en;
+  const licencia = org ? estadoLicencia(org.organizacion) : null;
+  const maxUsuarios = org?.organizacion.max_usuarios ?? null;
   const puedeAsignar = (org?.rol === 'admin' || org?.rol === 'editor') && !org?.expira_en;
   const [miembros, setMiembros] = useState<Miembro[]>([]);
   const [formularios, setFormularios] = useState<FormularioCorto[]>([]);
@@ -376,11 +388,23 @@ export function Equipo() {
             <h1 className="text-xl font-bold">Equipo</h1>
             <p className="text-sm text-gray-500">Quién trabaja en {org?.organizacion.nombre} y qué puede hacer.</p>
           </div>
-          {esAdmin && (
-            <button className="btn-primary" onClick={() => setModal({ tipo: 'invitar' })}>
-              <UserPlus className="h-4 w-4" /> Agregar persona
-            </button>
-          )}
+          {esAdmin && (() => {
+            // Cupo del plan: cuentan los activos permanentes (el acceso de emergencia no ocupa cupo)
+            const usados = miembros.filter((m) => m.activo && !m.expira_en).length;
+            const lleno = maxUsuarios != null && usados >= maxUsuarios;
+            return (
+              <div className="text-right">
+                <button className="btn-primary" disabled={lleno || !licencia?.vigente} onClick={() => setModal({ tipo: 'invitar' })}>
+                  <UserPlus className="h-4 w-4" /> Agregar persona
+                </button>
+                {maxUsuarios != null && (
+                  <p className={`mt-1 text-xs ${lleno ? 'text-amber-700' : 'text-gray-400'}`}>
+                    {usados} de {maxUsuarios} usuarios del plan{lleno && ' · para agregar más, contacta a GeoOrigen'}
+                  </p>
+                )}
+              </div>
+            );
+          })()}
         </div>
 
         {aviso && (

@@ -9,6 +9,9 @@
 //   - Sin email (usuario)       → cuenta "sin correo": usuario@sin-correo.geoorigen.com,
 //                                 la contraseña la fija y la cambia el admin.
 //   - Si la persona ya tiene cuenta, solo se agrega a la organización.
+// POST { accion: 'primer_admin', org_id, nombre, email?, usuario?, password? }
+//   - Solo GeoOrigen (administrador de la plataforma) y solo si la organización aún no
+//     tiene administrador: crea al primer admin de una asociación nueva.
 // POST { accion: 'cambiar_clave', org_id, user_id, password }
 //   - El admin cambia la contraseña de alguien que pertenece SOLO a su organización.
 
@@ -65,15 +68,31 @@ Deno.serve(async (req) => {
   const orgId = body.org_id;
   if (!orgId) return respuesta({ error: 'Falta org_id' }, 400);
 
-  // ¿Es admin activo (y no de emergencia, que es solo lectura) de esa organización?
-  const { data: yo } = await admin
-    .from('miembros')
-    .select('rol, activo, expira_en')
-    .eq('org_id', orgId)
-    .eq('user_id', quien.user.id)
-    .maybeSingle();
-  if (!yo || yo.rol !== 'admin' || !yo.activo || yo.expira_en) {
-    return respuesta({ error: 'Solo un administrador de la organización puede hacer esto' }, 403);
+  const primerAdmin = body.accion === 'primer_admin';
+  if (primerAdmin) {
+    // GeoOrigen (administrador de la plataforma) crea SOLO el primer administrador de una
+    // organización nueva; desde ahí la asociación maneja su equipo. GeoOrigen no se puede
+    // nombrar a sí mismo: para ver datos de una asociación existe el acceso de emergencia.
+    const { data: plataforma } = await admin.from('plataforma_admins').select('user_id').eq('user_id', quien.user.id).maybeSingle();
+    if (!plataforma) return respuesta({ error: 'Solo el administrador de la plataforma puede hacer esto' }, 403);
+    const { count: admins } = await admin.from('miembros').select('user_id', { count: 'exact', head: true })
+      .eq('org_id', orgId).eq('rol', 'admin').eq('activo', true).is('expira_en', null);
+    if ((admins ?? 0) > 0) {
+      return respuesta({ error: 'Esta organización ya tiene administrador: él gestiona su equipo desde el panel' }, 409);
+    }
+    body.accion = 'invitar';
+    body.rol = 'admin';
+  } else {
+    // ¿Es admin activo (y no de emergencia, que es solo lectura) de esa organización?
+    const { data: yo } = await admin
+      .from('miembros')
+      .select('rol, activo, expira_en')
+      .eq('org_id', orgId)
+      .eq('user_id', quien.user.id)
+      .maybeSingle();
+    if (!yo || yo.rol !== 'admin' || !yo.activo || yo.expira_en) {
+      return respuesta({ error: 'Solo un administrador de la organización puede hacer esto' }, 403);
+    }
   }
 
   // ── Cambiar contraseña de un miembro ────────────────────────────────────────
@@ -124,10 +143,33 @@ Deno.serve(async (req) => {
     return respuesta({ error: 'La contraseña debe tener 8 caracteres o más' }, 400);
   }
 
+  // Licencia y cupo del plan: se revisan ANTES de crear la cuenta (la base también los exige)
+  const { data: org } = await admin.from('organizaciones').select('activa, licencia_vence, max_usuarios').eq('id', orgId).single();
+  const hoy = new Date().toISOString().slice(0, 10);
+  if (!org || !org.activa || (org.licencia_vence && org.licencia_vence < hoy)) {
+    return respuesta({ error: 'La licencia de esta organización está vencida o suspendida. Contacta a GeoOrigen para renovarla.' }, 403);
+  }
+  if (org.max_usuarios != null) {
+    const { data: activos } = await admin.from('miembros').select('user_id')
+      .eq('org_id', orgId).eq('activo', true).is('expira_en', null);
+    const { data: existente } = await admin.from('perfiles').select('user_id').eq('email', email).maybeSingle();
+    const yaEsMiembro = !!existente && (activos ?? []).some((m) => m.user_id === existente.user_id);
+    if (!yaEsMiembro && (activos ?? []).length >= org.max_usuarios) {
+      return respuesta({ error: `El plan de esta organización permite ${org.max_usuarios} usuario(s). Para agregar más, contacta a GeoOrigen.` }, 409);
+    }
+  }
+
   // ¿Ya tiene cuenta? (los perfiles se crean solos con cada usuario)
   const { data: perfil } = await admin.from('perfiles').select('user_id').eq('email', email).maybeSingle();
   let userId = perfil?.user_id as string | undefined;
   let invitado = false;
+
+  if (primerAdmin && userId) {
+    const { data: esPlataforma } = await admin.from('plataforma_admins').select('user_id').eq('user_id', userId).maybeSingle();
+    if (esPlataforma) {
+      return respuesta({ error: 'El administrador de la asociación debe ser una persona de la asociación, no de GeoOrigen' }, 400);
+    }
+  }
 
   if (!userId) {
     if (password) {

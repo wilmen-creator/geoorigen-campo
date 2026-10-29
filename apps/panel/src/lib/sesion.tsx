@@ -10,7 +10,22 @@ export interface Membresia {
   org_id: string;
   rol: Rol;
   expira_en: string | null;
-  organizacion: { id: string; nombre: string; slug: string };
+  organizacion: {
+    id: string; nombre: string; slug: string;
+    /** Licencia: activa, fecha de vencimiento (null = no vence) y máximo de usuarios (null = sin límite) */
+    activa: boolean; licencia_vence: string | null; max_usuarios: number | null;
+  };
+}
+
+/** Estado de la licencia de una organización y días que le quedan */
+export function estadoLicencia(o: Membresia['organizacion']): { vigente: boolean; dias: number | null; texto: string } {
+  if (!o.activa) return { vigente: false, dias: null, texto: 'Organización suspendida: puedes ver tus datos, pero no exportarlos ni crear nada nuevo. Contacta a GeoOrigen.' };
+  if (!o.licencia_vence) return { vigente: true, dias: null, texto: '' };
+  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+  const dias = Math.round((new Date(`${o.licencia_vence}T00:00:00`).getTime() - hoy.getTime()) / 86400000);
+  const fecha = new Date(`${o.licencia_vence}T00:00:00`).toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' });
+  if (dias < 0) return { vigente: false, dias, texto: `La licencia venció el ${fecha}: puedes ver tus datos, pero no exportarlos ni crear nada nuevo. Contacta a GeoOrigen para renovarla.` };
+  return { vigente: true, dias, texto: dias <= 7 ? `La licencia vence el ${fecha} (${dias === 0 ? 'hoy' : `en ${dias} día(s)`}).` : '' };
 }
 
 interface ContextoSesion {
@@ -57,7 +72,7 @@ export function ProveedorSesion({ children }: { children: ReactNode }) {
     }
     const { data } = await supabase
       .from('miembros')
-      .select('org_id, rol, expira_en, organizacion:organizaciones(id, nombre, slug)')
+      .select('org_id, rol, expira_en, organizacion:organizaciones(id, nombre, slug, activa, licencia_vence, max_usuarios)')
       .eq('user_id', s.user.id)
       .eq('activo', true);
     const ahora = Date.now();
@@ -112,6 +127,20 @@ export function useSesion(): ContextoSesion {
   const c = useContext(Contexto);
   if (!c) throw new Error('useSesion fuera de ProveedorSesion');
   return c;
+}
+
+/**
+ * ¿Puede exportar o descargar datos (Excel, CSV, KML, QR)? Con la licencia vencida o
+ * suspendida los datos se ven pero no se descargan. El acceso de emergencia de
+ * GeoOrigen tampoco descarga: solo consulta.
+ */
+export function puedeExportar(org: Membresia | null): { si: boolean; motivo: string } {
+  if (!org) return { si: false, motivo: '' };
+  if (org.expira_en) return { si: false, motivo: 'El acceso de emergencia es solo de consulta: no permite descargar datos.' };
+  if (!estadoLicencia(org.organizacion).vigente) {
+    return { si: false, motivo: 'La licencia está vencida o suspendida: puedes ver los datos, pero no descargarlos. Contacta a GeoOrigen para renovarla.' };
+  }
+  return { si: true, motivo: '' };
 }
 
 /** ¿El rol actual puede diseñar formularios? */

@@ -15,6 +15,8 @@ export function mensajeError(e: { message?: string } | null | undefined): string
   const m = e?.message ?? 'Error desconocido';
   if (m.includes('Invalid login credentials')) return 'Correo o contraseña incorrectos';
   if (m.includes('Email not confirmed')) return 'El correo aún no está confirmado';
+  // Avisos de licencia y cupo que manda el servidor: se muestran sin el código
+  if (/^(LICENCIA|LIMITE_USUARIOS):/.test(m)) return m.replace(/^\w+:\s*/, '');
   if (m.includes('violates foreign key') && m.includes('registros')) {
     return 'No se puede borrar: el formulario ya tiene registros. Desactívalo en su lugar.';
   }
