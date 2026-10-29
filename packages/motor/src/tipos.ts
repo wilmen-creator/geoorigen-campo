@@ -9,7 +9,7 @@ export type TipoCampo =
   // Contacto
   | 'email' | 'tel'
   // Especiales
-  | 'gps' | 'foto' | 'firma' | 'calculado' | 'repetible'
+  | 'gps' | 'foto' | 'firma' | 'calculado' | 'repetible' | 'qr'
   // Diseño (no guardan valor)
   | 'separador' | 'instruccion';
 
@@ -75,7 +75,29 @@ export interface Campo {
   permitirGaleria?: boolean;
   /** Solo 'calificacion' */
   estrellas?: number;
+  /**
+   * Qué dato del productor es este campo, para el QR: en la línea base indica qué
+   * va dentro del QR; en una visita indica qué se llena solo al escanearlo.
+   */
+  datoQR?: DatoQR;
+  /**
+   * Solo 'qr': datos del productor que trae el QR. Se muestran solos debajo del botón,
+   * sin poder editarse, y se guardan con la encuesta (ver camposDeQR).
+   */
+  traeQR?: DatoQR[];
 }
+
+export type DatoQR = 'cedula' | 'nombre' | 'finca' | 'vereda' | 'municipio' | 'telefono' | 'ubicacion';
+
+export const DATOS_QR: { dato: DatoQR; etiqueta: string }[] = [
+  { dato: 'cedula', etiqueta: 'Cédula / documento' },
+  { dato: 'nombre', etiqueta: 'Nombre del productor' },
+  { dato: 'finca', etiqueta: 'Nombre de la finca' },
+  { dato: 'vereda', etiqueta: 'Vereda' },
+  { dato: 'municipio', etiqueta: 'Municipio' },
+  { dato: 'telefono', etiqueta: 'Teléfono' },
+  { dato: 'ubicacion', etiqueta: 'Ubicación de la finca (GPS)' },
+];
 
 export interface Seccion {
   id: string;
@@ -122,5 +144,32 @@ export type Valores = { [key: string]: Valor };
  *  el primer campo de texto del formulario (para no mostrar "Sin título"). */
 export function claveTitulo(esquema: Esquema): string {
   if (esquema.claveNombre) return esquema.claveNombre;
-  return esquema.secciones.flatMap((s) => s.campos).find((c) => c.tipo === 'texto')?.key ?? '';
+  const campos = esquema.secciones.flatMap((s) => s.campos);
+  // Una visita con QR: el nombre del productor que trae el QR
+  const qr = campos.find((c) => c.tipo === 'qr' && c.traeQR?.includes('nombre'));
+  if (qr) return claveDatoQR(qr.key, 'nombre');
+  return campos.find((c) => c.tipo === 'texto')?.key ?? '';
+}
+
+/** Clave donde se guarda un dato que trajo el QR: "qr_productor" + "cedula" → "qr_productor_cedula" */
+export const claveDatoQR = (campoQR: string, dato: DatoQR) => `${campoQR}_${dato}`;
+
+/** Campos (de solo lectura) con los datos que trae un campo 'qr' */
+export function camposDeQR(campo: Campo): Campo[] {
+  if (campo.tipo !== 'qr') return [];
+  return (campo.traeQR ?? []).map((dato) => ({
+    key: claveDatoQR(campo.key, dato),
+    etiqueta: DATOS_QR.find((d) => d.dato === dato)?.etiqueta ?? dato,
+    tipo: dato === 'ubicacion' ? 'gps' : 'texto',
+  }));
+}
+
+/** Los campos de una lista con los datos del QR a continuación de cada campo 'qr' */
+export const conCamposDeQR = (campos: Campo[]): Campo[] => campos.flatMap((c) => [c, ...camposDeQR(c)]);
+
+/** Campo GPS con la ubicación de la finca: el elegido en el editor o el que trajo un QR */
+export function claveUbicacionFinca(esquema: Esquema): string {
+  if (esquema.claveUbicacion) return esquema.claveUbicacion;
+  const qr = esquema.secciones.flatMap((s) => s.campos).find((c) => c.tipo === 'qr' && c.traeQR?.includes('ubicacion'));
+  return qr ? claveDatoQR(qr.key, 'ubicacion') : '';
 }

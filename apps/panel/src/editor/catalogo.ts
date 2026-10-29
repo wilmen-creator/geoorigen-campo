@@ -28,6 +28,7 @@ export const TIPOS: MetaTipo[] = [
   { tipo: 'firma', etiqueta: 'Firma', icono: '✍', grupo: 'Especiales' },
   { tipo: 'calculado', etiqueta: 'Campo calculado', icono: '=', grupo: 'Especiales' },
   { tipo: 'repetible', etiqueta: 'Grupo repetible', icono: '⧉', grupo: 'Especiales' },
+  { tipo: 'qr', etiqueta: 'Escanear QR del productor', icono: '▣', grupo: 'Especiales' },
   { tipo: 'separador', etiqueta: 'Título / separador', icono: '—', grupo: 'Diseño' },
   { tipo: 'instruccion', etiqueta: 'Instrucción', icono: 'ℹ', grupo: 'Diseño' },
 ];
@@ -99,6 +100,11 @@ export function campoNuevo(tipo: TipoCampo, usadas: Set<string>): Campo {
   if (tipo === 'foto') { campo.maxFotos = 5; campo.permitirGaleria = true; }
   if (tipo === 'calificacion') campo.estrellas = 5;
   if (tipo === 'calculado') campo.formula = '';
+  if (tipo === 'qr') {
+    campo.etiqueta = 'Productor (escanear QR)';
+    campo.key = claveUnica('qr_productor', usadas);
+    campo.traeQR = ['cedula', 'nombre', 'finca', 'ubicacion'];
+  }
   return campo;
 }
 

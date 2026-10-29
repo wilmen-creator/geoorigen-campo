@@ -7,3 +7,4 @@ export { evaluarCondicion, evaluarRegla, seccionesVisibles, camposVisibles, esVa
 export { validarRegistro, type ErrorValidacion } from './validaciones.ts';
 export { calcularDerivados } from './calculos.ts';
 export { revisarEsquema, type Problema } from './revision.ts';
+export { armarQR, leerQR, aplicarQR, tieneDatosQR, type ContenidoQR } from './qr.ts';

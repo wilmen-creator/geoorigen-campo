@@ -3,10 +3,13 @@
 import { useState } from 'react';
 import { Plus, X, AlertTriangle } from 'lucide-react';
 import {
-  revisarFormula, evaluarFormula, FUNCIONES_DISPONIBLES,
-  type Campo, type Condicion, type Opcion, type Validacion,
+  revisarFormula, evaluarFormula, FUNCIONES_DISPONIBLES, DATOS_QR,
+  type Campo, type Condicion, type DatoQR, type Opcion, type TipoCampo, type Validacion,
 } from '@geoorigen/motor';
 import { OPERADORES, VALIDACIONES, aClave, metaTipo } from './catalogo.ts';
+
+/** Tipos de campo que pueden ser un dato del productor en el QR */
+const TIPOS_DATO_QR: TipoCampo[] = ['texto', 'parrafo', 'numero', 'tel', 'select', 'radio', 'gps'];
 
 export interface CampoReferencia {
   key: string;
@@ -215,8 +218,10 @@ function EditorFormula({ campo, onChange, referencias }: {
 
 type Pestana = 'basico' | 'opciones' | 'formula' | 'condicion' | 'validacion';
 
-export function Propiedades({ campo, onChange, onCerrar, referencias, clavePublicada, opcionesPublicadas, clavesUsadas }: {
+export function Propiedades({ campo, onChange, onCerrar, referencias, clavePublicada, opcionesPublicadas, clavesUsadas, enGrupo }: {
   campo: Campo;
+  /** El campo está dentro de un grupo repetible (no puede ser dato del QR) */
+  enGrupo: boolean;
   onChange: (c: Campo) => void;
   onCerrar: () => void;
   /** Campos que se pueden usar en condiciones y fórmulas */
@@ -357,6 +362,45 @@ export function Propiedades({ campo, onChange, onCerrar, referencias, clavePubli
                 </label>
                 <p className="text-xs text-gray-400">Las fotos de galería se marcan en el panel con su fecha y GPS originales.</p>
               </>
+            )}
+
+            {campo.tipo === 'qr' && (
+              <div className="space-y-2">
+                <label className="label">Datos que trae el QR</label>
+                {DATOS_QR.map((d) => {
+                  const lista = campo.traeQR ?? [];
+                  return (
+                    <label key={d.dato} className="flex items-center gap-2 text-sm">
+                      <input type="checkbox" className="accent-primary" checked={lista.includes(d.dato)}
+                        onChange={(e) => set({
+                          // Se conserva el orden de la lista de datos
+                          traeQR: DATOS_QR.map((x) => x.dato).filter((x) => (x === d.dato ? e.target.checked : lista.includes(x))),
+                        })} />
+                      {d.etiqueta}
+                    </label>
+                  );
+                })}
+                <p className="rounded-lg bg-primary-light px-3 py-2 text-xs text-primary">
+                  En la app, al escanear el QR del productor, estos datos aparecen solos debajo del botón y no se
+                  pueden editar. Salen de las preguntas que en la línea base tienen marcado «Dato del productor (QR)».
+                  La ubicación se usa para la alerta de distancia a la finca.
+                </p>
+              </div>
+            )}
+
+            {!enGrupo && TIPOS_DATO_QR.includes(campo.tipo) && (
+              <div>
+                <label className="label">Dato del productor (QR)</label>
+                <select className="input" value={campo.datoQR ?? ''}
+                  onChange={(e) => set({ datoQR: (e.target.value || undefined) as DatoQR | undefined })}>
+                  <option value="">— Ninguno —</option>
+                  {DATOS_QR.filter((d) => (campo.tipo === 'gps') === (d.dato === 'ubicacion'))
+                    .map((d) => <option key={d.dato} value={d.dato}>{d.etiqueta}</option>)}
+                </select>
+                <p className="mt-1 text-xs text-gray-400">
+                  En la línea base: este dato va dentro del QR del productor. En una visita: se llena solo al escanear el QR.
+                </p>
+              </div>
             )}
 
             {campo.tipo === 'repetible' && (

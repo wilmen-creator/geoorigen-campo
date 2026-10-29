@@ -1,13 +1,14 @@
 // Campos de una encuesta en el celular. Usan el motor compartido para
 // condiciones y cálculos, igual que la vista previa del panel.
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Camera as IconoCamara, ImagePlus, MapPin, Plus, Trash2, X, ChevronDown, ChevronUp } from 'lucide-react';
-import { camposVisibles, type Campo, type Contexto, type Fila, type Ubicacion, type Valor } from '@geoorigen/motor';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Camera as IconoCamara, ImagePlus, MapPin, Plus, Trash2, X, ChevronDown, ChevronUp, QrCode, CheckCircle2 } from 'lucide-react';
+import { camposDeQR, camposVisibles, type Campo, type Contexto, type Fila, type Ubicacion, type Valor } from '@geoorigen/motor';
 import { tomarPunto } from '../lib/gps.ts';
 import { tomarFoto, borrarArchivo, guardarFirma, urlArchivo } from '../lib/fotos.ts';
 import { db } from '../lib/db.ts';
 import { SignatureCanvas } from '../Firma.tsx';
+import { EscanerQR } from '../EscanerQR.tsx';
 
 export interface ContextoCampo {
   registroId: string;
@@ -15,6 +16,8 @@ export interface ContextoCampo {
   soloLectura: boolean;
   /** Claves con error de validación (ruta completa, p. ej. 'parcelas[2].variedad') */
   errores: Set<string>;
+  /** Lee el texto de un QR y llena los datos del productor. Devuelve un mensaje de error o null. */
+  aplicarQR?: (campoKey: string, texto: string) => string | null;
 }
 
 function Etiqueta({ campo, error }: { campo: Campo; error: boolean }) {
@@ -27,6 +30,51 @@ function Etiqueta({ campo, error }: { campo: Campo; error: boolean }) {
 
 const Ayuda = ({ campo }: { campo: Campo }) =>
   campo.ayuda && campo.tipo !== 'instruccion' ? <p className="mt-1 text-xs text-gray-500">{campo.ayuda}</p> : null;
+
+// ── QR del productor ──────────────────────────────────────────────────────────
+
+function CampoQR({ campo, valor, ctx, datos }: { campo: Campo; valor: Valor; ctx: ContextoCampo; datos: Contexto[number] }) {
+  const [abierto, setAbierto] = useState(false);
+  const [mensaje, setMensaje] = useState('');
+  const leido = typeof valor === 'string' && !!valor;
+  const alLeer = useCallback((texto: string) => {
+    setAbierto(false);
+    setMensaje(ctx.aplicarQR?.(campo.key, texto) ?? '');
+  }, [ctx, campo.key]);
+  return (
+    <div className="space-y-2">
+      {leido && (
+        <p className="flex items-center gap-2 rounded-xl bg-primary-light px-3 py-2 text-sm text-primary">
+          <CheckCircle2 className="h-4 w-4 shrink-0" /> Datos del productor cargados desde el QR
+        </p>
+      )}
+      {leido && camposDeQR(campo).length > 0 && (
+        // Datos del productor: vienen del QR y no se editan
+        <dl className="divide-y divide-gray-100 rounded-xl border border-gray-200 bg-white text-sm">
+          {camposDeQR(campo).map((c) => {
+            const v = datos[c.key];
+            const texto = v && typeof v === 'object' && 'lat' in v
+              ? `📍 ${(v as Ubicacion).lat.toFixed(6)}, ${(v as Ubicacion).lon.toFixed(6)}`
+              : typeof v === 'string' && v ? v : '—';
+            return (
+              <div key={c.key} className="flex gap-3 px-3 py-2">
+                <dt className="w-2/5 shrink-0 text-gray-500">{c.etiqueta}</dt>
+                <dd className="min-w-0 flex-1 font-medium break-words">{texto}</dd>
+              </div>
+            );
+          })}
+        </dl>
+      )}
+      {mensaje && <p className="text-sm text-red-600">{mensaje}</p>}
+      {!ctx.soloLectura && (
+        <button type="button" className={leido ? 'btn-secundario w-full' : 'btn-primario w-full'} onClick={() => { setMensaje(''); setAbierto(true); }}>
+          <QrCode className="h-5 w-5" /> {leido ? 'Escanear otro QR' : 'Escanear QR del productor'}
+        </button>
+      )}
+      {abierto && <EscanerQR onLeido={alLeer} onCerrar={() => setAbierto(false)} />}
+    </div>
+  );
+}
 
 // ── GPS ───────────────────────────────────────────────────────────────────────
 
@@ -236,6 +284,8 @@ export function CampoApp({ campo, ctx, contexto, ruta, onChange }: {
       return marco(<CampoFotos campo={campo} valor={v ?? null} onChange={onChange} ctx={ctx} />);
     case 'firma':
       return marco(<CampoFirma campo={campo} valor={v ?? null} onChange={onChange} ctx={ctx} />);
+    case 'qr':
+      return marco(<CampoQR campo={campo} valor={v ?? null} ctx={ctx} datos={contexto[contexto.length - 1]} />);
     case 'repetible':
       return marco(<Grupo campo={campo} ctx={ctx} contexto={contexto} ruta={ruta} onChange={onChange} />);
     case 'sino':

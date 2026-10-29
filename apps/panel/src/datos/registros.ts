@@ -1,10 +1,11 @@
 // Consulta de registros para la pantalla Datos y conversión de respuestas a texto.
 
-import { claveTitulo, evaluarRegla, type Campo, type Esquema, type Regla, type Ubicacion, type Valor, type Valores } from '@geoorigen/motor';
+import { claveTitulo, conCamposDeQR, evaluarRegla, type Campo, type Esquema, type Regla, type Ubicacion, type Valor, type Valores } from '@geoorigen/motor';
 import { supabase } from '../lib/supabase.ts';
 
 export interface RegistroPanel {
   id: string;
+  org_id: string;
   formulario_id: string;
   formulario_version: number;
   estado: string;
@@ -111,6 +112,8 @@ export function valorComoTexto(campo: Campo, v: Valor | undefined): string {
       return Array.isArray(v) ? `${v.length} foto(s)` : '';
     case 'firma':
       return v ? 'Firmado' : '';
+    case 'qr':
+      return v ? 'Datos tomados del QR de la línea base' : '';
     case 'repetible':
       return Array.isArray(v) ? `${v.length} fila(s)` : '';
     default:
@@ -120,7 +123,7 @@ export function valorComoTexto(campo: Campo, v: Valor | undefined): string {
 
 /** Campos de primer nivel que guardan respuesta */
 export function camposConValor(esquema: Esquema): Campo[] {
-  return esquema.secciones.flatMap((s) => s.campos).filter((c) => !['separador', 'instruccion'].includes(c.tipo));
+  return conCamposDeQR(esquema.secciones.flatMap((s) => s.campos)).filter((c) => !['separador', 'instruccion'].includes(c.tipo));
 }
 
 /** Título y subtítulo de un registro según el esquema */

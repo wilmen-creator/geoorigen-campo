@@ -511,6 +511,7 @@ export function EditorFormulario() {
                 clavePublicada={publicadas.claves.has((grupoSeleccionado ? `${grupoSeleccionado.key}.` : '') + seleccionado.key)}
                 opcionesPublicadas={publicadas.opciones.get((grupoSeleccionado ? `${grupoSeleccionado.key}.` : '') + seleccionado.key) ?? new Set()}
                 clavesUsadas={otrasClaves}
+                enGrupo={!!grupoSeleccionado}
               />
             ) : (
               <div className="flex h-full flex-col items-center justify-center px-6 text-center text-gray-400">

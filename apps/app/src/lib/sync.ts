@@ -2,7 +2,7 @@
 //   1. sube encuestas pendientes  2. sube fotos y firmas  3. baja formularios
 //   4. baja el estado de sus encuestas (revisada, aprobada, rechazada…)
 
-import { claveTitulo, type Esquema, type Ubicacion } from '@geoorigen/motor';
+import { claveTitulo, claveUbicacionFinca, type Esquema, type Ubicacion } from '@geoorigen/motor';
 import { supabase, mensajeError } from './supabase.ts';
 import { db, esDe, porSubir, type FormularioLocal, type PuntoGPS, type RegistroLocal } from './db.ts';
 
@@ -28,7 +28,9 @@ function tituloLocal(r: RegistroLocal, form: FormularioLocal | undefined) {
 
 /** Ubicación de la finca: el campo GPS que el formulario marcó como tal */
 function geomFinca(r: RegistroLocal, esquema: Esquema | undefined) {
-  const v = esquema?.claveUbicacion ? (r.datos[esquema.claveUbicacion] as Ubicacion | undefined) : undefined;
+  // El campo GPS elegido en el editor o, en una visita, la ubicación que trajo el QR
+  const clave = esquema ? claveUbicacionFinca(esquema) : '';
+  const v = clave ? (r.datos[clave] as Ubicacion | undefined) : undefined;
   return v && typeof v === 'object' && 'lat' in v ? ewkt(v.lat, v.lon) : null;
 }
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   evaluarFormula, evaluarVerdad, revisarFormula, evaluarCondicion,
-  seccionesVisibles, validarRegistro, calcularDerivados,
+  seccionesVisibles, validarRegistro, calcularDerivados, armarQR, leerQR, aplicarQR, claveTitulo, claveUbicacionFinca, conCamposDeQR,
   type Esquema, type Valores,
 } from '../src/index.ts';
 
@@ -199,5 +199,65 @@ describe('revisión del esquema antes de publicar', () => {
 
   it('dentro de un repetible acepta referencias a la misma fila y a columnas', () => {
     expect(revisarEsquema(esquema).some((p) => p.campo === 'lotes.densidad')).toBe(false);
+  });
+});
+
+describe('QR del productor', () => {
+  const lineaBase: Esquema = {
+    version: 2, claveNombre: 'nom', secciones: [{ id: 's', titulo: 'S', campos: [
+      { key: 'cc', etiqueta: 'Cédula', tipo: 'texto', datoQR: 'cedula' },
+      { key: 'nom', etiqueta: 'Nombre', tipo: 'texto', datoQR: 'nombre' },
+      { key: 'fin', etiqueta: 'Finca', tipo: 'texto', datoQR: 'finca' },
+      { key: 'gps', etiqueta: 'Ubicación', tipo: 'gps', datoQR: 'ubicacion' },
+      { key: 'area', etiqueta: 'Área', tipo: 'decimal' },
+    ] }],
+  };
+  const visita: Esquema = {
+    version: 2, claveNombre: 'productor', secciones: [{ id: 's', titulo: 'S', campos: [
+      { key: 'escaneo', etiqueta: 'QR', tipo: 'qr' },
+      { key: 'documento', etiqueta: 'Documento', tipo: 'texto', datoQR: 'cedula' },
+      { key: 'productor', etiqueta: 'Productor', tipo: 'texto', datoQR: 'nombre' },
+      { key: 'punto_finca', etiqueta: 'Finca', tipo: 'gps', datoQR: 'ubicacion' },
+      { key: 'obs', etiqueta: 'Observaciones', tipo: 'parrafo' },
+    ] }],
+  };
+  const datos = { cc: '1061234', nom: 'María Gómez', fin: 'La Esperanza', gps: { lat: 2.4419871234, lon: -76.6063123, precision: 8 }, area: '2.5' };
+
+  it('arma el QR solo con los datos marcados y lo vuelve a leer', () => {
+    const texto = armarQR(lineaBase, datos, 'org1', 'reg1')!;
+    expect(texto.startsWith('GEO1:')).toBe(true);
+    expect(texto).not.toContain('2.5');  // el área no va en el QR
+    const qr = leerQR(texto)!;
+    expect(qr.r).toBe('reg1');
+    expect(qr.d.cedula).toBe('1061234');
+    expect(qr.d.ubicacion).toEqual({ lat: 2.441987, lon: -76.606312 });
+  });
+
+  it('llena la visita aunque las preguntas se llamen distinto', () => {
+    const qr = leerQR(armarQR(lineaBase, datos, 'org1', 'reg1')!)!;
+    const { datos: nuevos, llenados } = aplicarQR(visita, { obs: 'ok' }, 'escaneo', qr);
+    expect(llenados).toBe(3);
+    expect(nuevos).toMatchObject({ escaneo: 'reg1', documento: '1061234', productor: 'María Gómez', obs: 'ok' });
+    expect(nuevos.punto_finca).toEqual({ lat: 2.441987, lon: -76.606312 });
+  });
+
+  it('el campo QR trae su lista de datos sin crear preguntas', () => {
+    const simple: Esquema = { version: 2, claveNombre: '', secciones: [{ id: 's', titulo: 'S', campos: [
+      { key: 'qr', etiqueta: 'QR', tipo: 'qr', traeQR: ['cedula', 'nombre', 'telefono', 'ubicacion'] },
+      { key: 'obs', etiqueta: 'Observaciones', tipo: 'texto' },
+    ] }] };
+    const qr = leerQR(armarQR(lineaBase, datos, 'org1', 'reg1')!)!;
+    const { datos: nuevos, llenados } = aplicarQR(simple, { qr_telefono: 'viejo' }, 'qr', qr);
+    expect(llenados).toBe(3);
+    expect(nuevos).toMatchObject({ qr: 'reg1', qr_cedula: '1061234', qr_nombre: 'María Gómez', qr_telefono: null });
+    expect(claveTitulo(simple)).toBe('qr_nombre');
+    expect(claveUbicacionFinca(simple)).toBe('qr_ubicacion');
+    expect(conCamposDeQR(simple.secciones[0].campos).map((c) => c.key)).toEqual(['qr', 'qr_cedula', 'qr_nombre', 'qr_telefono', 'qr_ubicacion', 'obs']);
+  });
+
+  it('rechaza QR que no son de GeoOrigen', () => {
+    expect(leerQR('https://ejemplo.com')).toBeNull();
+    expect(leerQR('GEO1:{roto')).toBeNull();
+    expect(armarQR(lineaBase, {}, 'o', 'r')).toBeNull();
   });
 });

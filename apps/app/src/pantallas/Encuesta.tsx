@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, ChevronLeft, ChevronRight, Send, AlertCircle } from 'lucide-react';
 import {
-  calcularDerivados, camposVisibles, claveTitulo, seccionesVisibles, validarRegistro,
+  calcularDerivados, camposVisibles, claveTitulo, leerQR, aplicarQR, seccionesVisibles, validarRegistro,
   type ErrorValidacion, type Valores,
 } from '@geoorigen/motor';
 import { db, bloqueada, guardarLocal, type FormularioLocal, type RegistroLocal } from '../lib/db.ts';
@@ -130,7 +130,19 @@ export function Encuesta({ registroId, onSalir }: { registroId: string; onSalir:
     );
   }
 
-  const ctx: ContextoCampo = { registroId: registro.id, orgId: registro.org_id, soloLectura, errores: rutasError };
+  // QR del productor: llena sus datos (cédula, nombre, finca, ubicación…) sin internet
+  const leerQRProductor = (campoKey: string, texto: string): string | null => {
+    const qr = leerQR(texto);
+    if (!qr) return 'Ese código no es un QR de productor de GeoOrigen.';
+    if (qr.o !== registro.org_id) return 'Ese QR es de otra organización.';
+    const { datos, llenados } = aplicarQR(esquema, registro.datos, campoKey, qr);
+    if (!llenados) return 'El QR se leyó, pero este formulario no tiene campos marcados para recibir sus datos.';
+    cambiado.current = true;
+    setRegistro((r) => (r ? { ...r, datos: calcularDerivados(esquema, datos), estado: r.estado === 'rechazado' ? 'borrador' : r.estado } : r));
+    return null;
+  };
+
+  const ctx: ContextoCampo = { registroId: registro.id, orgId: registro.org_id, soloLectura, errores: rutasError, aplicarQR: leerQRProductor };
 
   const cambiar = (key: string, v: Valores[string]) => {
     cambiado.current = true;
@@ -184,6 +196,21 @@ export function Encuesta({ registroId, onSalir }: { registroId: string; onSalir:
     }
   };
 
+  // Devuelta para corregir (ya estuvo en el servidor y vuelve a ser editable)
+  const devuelta = registro.en_servidor && (registro.estado === 'rechazado' || registro.estado === 'borrador');
+
+  // Salir guarda en el celular pero no envía: si la encuesta ya está completa, se ofrece enviarla
+  const salir = () => {
+    if (!soloLectura && cambiado.current && (registro.estado === 'borrador' || registro.estado === 'rechazado')
+        && validarRegistro(esquema, registro.datos).length === 0) {
+      const pregunta = devuelta
+        ? '¿Enviar las correcciones ahora?\n\nAceptar: se envían al sincronizar.\nCancelar: quedan guardadas como borrador (no llegan al panel).'
+        : 'La encuesta está completa. ¿Enviarla ahora?\n\nAceptar: se envía al sincronizar.\nCancelar: queda guardada como borrador.';
+      if (confirm(pregunta)) { enviar(); return; }
+    }
+    onSalir();
+  };
+
   const claveT = claveTitulo(esquema);
   const titulo = (claveT && typeof registro.datos[claveT] === 'string' && registro.datos[claveT]) || form.nombre;
   const ultimo = paso >= secciones.length - 1;
@@ -191,7 +218,7 @@ export function Encuesta({ registroId, onSalir }: { registroId: string; onSalir:
   return (
     <div className="flex h-full flex-col">
       <header className="flex items-center gap-3 bg-primary px-3 py-3 text-white">
-        <button onClick={onSalir} className="rounded-lg p-1 active:bg-white/20" aria-label="Guardar y volver"><ArrowLeft className="h-6 w-6" /></button>
+        <button onClick={salir} className="rounded-lg p-1 active:bg-white/20" aria-label="Guardar y volver"><ArrowLeft className="h-6 w-6" /></button>
         <div className="min-w-0 flex-1">
           <p className="truncate font-semibold">{String(titulo)}</p>
           <p className="text-xs opacity-80">{form.nombre} · {paso + 1} de {secciones.length}</p>
@@ -216,9 +243,10 @@ export function Encuesta({ registroId, onSalir }: { registroId: string; onSalir:
             Si hay que corregirla, pide a un administrador que la devuelva.
           </p>
         )}
-        {registro.estado === 'rechazado' && (
+        {devuelta && (
           <p className="mx-4 mt-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">
-            Te la devolvieron para corregir. Corrígela y vuelve a enviarla.
+            Te la devolvieron para corregir. Cuando termines, pulsa <strong>Enviar encuesta</strong> al final
+            para que llegue al panel. Salir solo la guarda en el celular.
           </p>
         )}
         {errores.length > 0 && (

@@ -31,11 +31,12 @@ function CampoVista({ campo, ctx, onChange }: { campo: Campo; ctx: Contexto; onC
           <div className="input bg-geo-gray font-medium text-primary">{texto || '—'}</div>
         </div>
       );
-    case 'gps': case 'foto': case 'firma':
+    case 'gps': case 'foto': case 'firma': case 'qr':
       return (
         <div className="col-span-2">{etiqueta}
           <div className="rounded-lg border border-dashed border-gray-200 px-3 py-3 text-center text-xs text-gray-400">
-            {campo.tipo === 'gps' ? '📍 Captura de GPS' : campo.tipo === 'foto' ? `📷 Hasta ${campo.maxFotos ?? 5} fotos` : '✍ Firma'} · solo en la app
+            {campo.tipo === 'gps' ? '📍 Captura de GPS' : campo.tipo === 'foto' ? `📷 Hasta ${campo.maxFotos ?? 5} fotos`
+              : campo.tipo === 'qr' ? `▣ Escanear QR del productor · trae: ${(campo.traeQR ?? []).join(', ') || 'nada (elige los datos)'}` : '✍ Firma'} · solo en la app
           </div>{ayuda}
         </div>
       );

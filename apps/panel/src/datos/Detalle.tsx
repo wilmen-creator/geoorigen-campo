@@ -1,8 +1,9 @@
 // Panel lateral con el detalle de un registro.
 
 import { useEffect, useState } from 'react';
-import { X, AlertTriangle, MapPin, Clock, Smartphone, History } from 'lucide-react';
-import type { Campo, Esquema, Fila } from '@geoorigen/motor';
+import { X, AlertTriangle, MapPin, Clock, Smartphone, History, QrCode } from 'lucide-react';
+import { conCamposDeQR, tieneDatosQR, type Campo, type Esquema, type Fila } from '@geoorigen/motor';
+import { QRProductor } from './QRProductor.tsx';
 import { supabase, mensajeError } from '../lib/supabase.ts';
 import { ALERTAS, tituloRegistro, valorComoTexto, type RegistroPanel } from './registros.ts';
 import { COLOR_ESTADO } from './Mapa.tsx';
@@ -64,6 +65,7 @@ export function Detalle({ registro, esquemaVersion, estados, puedeCambiarEstado,
   const [nombres, setNombres] = useState<Map<string, string>>(new Map());
   const [error, setError] = useState('');
   const { titulo, subtitulo } = tituloRegistro(registro, esquemaVersion);
+  const [verQR, setVerQR] = useState(false);
   // La app sube también las fotos quitadas y las firmas reemplazadas (nunca borra nada sin subirlo):
   // se muestran aparte de las que usa la encuesta
   const usados = JSON.stringify(registro.datos);
@@ -126,12 +128,21 @@ export function Detalle({ registro, esquemaVersion, estados, puedeCambiarEstado,
         </div>
         {/* En la app, una encuesta sincronizada no se puede editar hasta que se devuelve */}
         {puedeCambiarEstado && registro.estado !== 'rechazado' && registro.estado !== 'borrador' && (
-          <button className="btn-secundario w-full text-sm" onClick={() => cambiarEstado('rechazado')}>
+          <button className="btn-secondary w-full text-sm" onClick={() => cambiarEstado('rechazado')}>
             Devolver al técnico para corregir
           </button>
         )}
         {registro.estado === 'rechazado' && (
           <p className="text-xs text-gray-500">El técnico puede corregirla en la app. Al reenviarla vuelve a quedar bloqueada.</p>
+        )}
+        {esquemaVersion && tieneDatosQR(esquemaVersion) && (
+          <button className="btn-secondary w-full text-sm" onClick={() => setVerQR(true)}>
+            <QrCode className="h-4 w-4" /> QR del productor
+          </button>
+        )}
+        {verQR && esquemaVersion && (
+          <QRProductor esquema={esquemaVersion} datos={registro.datos} orgId={registro.org_id} registroId={registro.id}
+            onCerrar={() => setVerQR(false)} />
         )}
         {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
@@ -172,7 +183,7 @@ export function Detalle({ registro, esquemaVersion, estados, puedeCambiarEstado,
           {esquemaVersion ? esquemaVersion.secciones.map((s) => (
             <div key={s.id} className="space-y-1.5">
               <p className="border-b border-gray-100 pb-1 text-sm font-semibold">{s.titulo}</p>
-              {s.campos.map((c) => <Respuesta key={c.key} campo={c} valor={registro.datos[c.key]} />)}
+              {conCamposDeQR(s.campos).map((c) => <Respuesta key={c.key} campo={c} valor={registro.datos[c.key]} />)}
             </div>
           )) : <p className="text-sm text-gray-400">Cargando formulario…</p>}
         </div>
