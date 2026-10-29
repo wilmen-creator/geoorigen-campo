@@ -19,9 +19,19 @@ const DOMINIO_SIN_CORREO = 'sin-correo.geoorigen.com';
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-usuario-jwt',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
+
+// Prefiere la llave secreta nueva (sb_secret_…); la service_role antigua deja de
+// servir si se desactivan las llaves "legacy" del proyecto.
+function llaveServicio(): string {
+  try {
+    const nuevas = JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS') ?? '{}');
+    if (nuevas.default) return nuevas.default;
+  } catch { /* sin llaves nuevas */ }
+  return Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+}
 
 function respuesta(cuerpo: unknown, status = 200) {
   return new Response(JSON.stringify(cuerpo), {
@@ -34,14 +44,17 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: cors });
   if (req.method !== 'POST') return respuesta({ error: 'Método no permitido' }, 405);
 
-  const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, {
+  const admin = createClient(Deno.env.get('SUPABASE_URL')!, llaveServicio(), {
     auth: { persistSession: false },
   });
 
   // ¿Quién llama?
-  const jwt = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '');
+  const jwt = req.headers.get('x-usuario-jwt') || (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '');
   const { data: quien, error: errQuien } = await admin.auth.getUser(jwt);
-  if (errQuien || !quien.user) return respuesta({ error: 'Sesión no válida' }, 401);
+  if (errQuien || !quien.user) {
+    console.error('getUser falló:', errQuien?.message);
+    return respuesta({ error: `Sesión no válida (${errQuien?.message ?? 'sin usuario'})` }, 401);
+  }
 
   let body: Record<string, string>;
   try {

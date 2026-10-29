@@ -37,7 +37,14 @@ function identificacion(email: string) {
 }
 
 async function llamarFuncion(cuerpo: Record<string, unknown>) {
-  const { data, error } = await supabase.functions.invoke('invitar-miembro', { body: cuerpo });
+  // El token del usuario va explícito (y repetido en un encabezado propio): con las
+  // llaves nuevas de Supabase el Authorization puede no llegar a la función.
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) throw new Error('Tu sesión expiró: sal y vuelve a entrar');
+  const { data, error } = await supabase.functions.invoke('invitar-miembro', {
+    body: cuerpo,
+    headers: { Authorization: `Bearer ${session.access_token}`, 'x-usuario-jwt': session.access_token },
+  });
   if (error) {
     // El mensaje útil viene en el cuerpo de la respuesta
     const detalle = await (error as { context?: Response }).context?.json?.().catch(() => null);
