@@ -1,0 +1,107 @@
+name: Respaldo nocturno a Google Drive
+
+# Cada noche copia a Google Drive (carpeta "Respaldos GeoOrigen Campo"):
+#   base de datos/AAAA-MM-DD/  → copia completa para restaurar (.dump) y los datos en
+#                                CSV para abrir en Excel. Se guardan 60 días.
+#   fotos/                     → todas las fotos y firmas. Solo copia las nuevas y
+#                                nunca borra nada (aunque se borre en el sistema).
+# El plan gratis de Supabase no hace copias: esta es la copia de GeoOrigen.
+#
+# Secretos que necesita (Settings → Secrets and variables → Actions):
+#   SUPABASE_DB_URL       cadena de conexión "Session pooler" de Supabase (con contraseña)
+#   SUPABASE_S3_ENDPOINT  Storage → S3 Connection → Endpoint
+#   SUPABASE_S3_KEY_ID    Storage → S3 Connection → Access key ID
+#   SUPABASE_S3_SECRET    Storage → S3 Connection → Secret access key
+#   RCLONE_DRIVE_TOKEN    autorización de Google Drive (rclone authorize "drive")
+
+on:
+  schedule:
+    - cron: '0 8 * * *'   # 3:00 a. m. en Colombia
+  workflow_dispatch:       # también se puede lanzar a mano desde Actions
+
+permissions:
+  contents: read
+
+concurrency:
+  group: respaldo
+  cancel-in-progress: false
+
+jobs:
+  respaldo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      CARPETA: Respaldos GeoOrigen Campo
+      # rclone se configura con variables: "gdrive" (tu Drive) y "supa" (fotos de Supabase)
+      RCLONE_CONFIG_GDRIVE_TYPE: drive
+      RCLONE_CONFIG_GDRIVE_SCOPE: drive
+      RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.RCLONE_DRIVE_TOKEN }}
+      RCLONE_CONFIG_SUPA_TYPE: s3
+      RCLONE_CONFIG_SUPA_PROVIDER: Other
+      RCLONE_CONFIG_SUPA_ENDPOINT: ${{ secrets.SUPABASE_S3_ENDPOINT }}
+      RCLONE_CONFIG_SUPA_REGION: sa-east-1
+      RCLONE_CONFIG_SUPA_ACCESS_KEY_ID: ${{ secrets.SUPABASE_S3_KEY_ID }}
+      RCLONE_CONFIG_SUPA_SECRET_ACCESS_KEY: ${{ secrets.SUPABASE_S3_SECRET }}
+      RCLONE_CONFIG_SUPA_FORCE_PATH_STYLE: 'true'
+      PGURL: ${{ secrets.SUPABASE_DB_URL }}
+
+    steps:
+      - name: Comprobar secretos
+        run: |
+          falta=""
+          [ -z "$PGURL" ] && falta="$falta SUPABASE_DB_URL"
+          [ -z "$RCLONE_CONFIG_GDRIVE_TOKEN" ] && falta="$falta RCLONE_DRIVE_TOKEN"
+          [ -z "$RCLONE_CONFIG_SUPA_ENDPOINT" ] && falta="$falta SUPABASE_S3_ENDPOINT"
+          [ -z "$RCLONE_CONFIG_SUPA_ACCESS_KEY_ID" ] && falta="$falta SUPABASE_S3_KEY_ID"
+          [ -z "$RCLONE_CONFIG_SUPA_SECRET_ACCESS_KEY" ] && falta="$falta SUPABASE_S3_SECRET"
+          if [ -n "$falta" ]; then echo "::error::Faltan secretos:$falta"; exit 1; fi
+
+      - name: Instalar herramientas (PostgreSQL 17 y rclone)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-common rclone
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y > /dev/null
+          sudo apt-get install -y -qq postgresql-client-17
+          pg_dump --version
+          rclone version | head -1
+
+      - name: Copia de la base de datos
+        run: |
+          FECHA=$(TZ=America/Bogota date +%F)
+          echo "FECHA=$FECHA" >> "$GITHUB_ENV"
+          DIR="$RUNNER_TEMP/respaldo"
+          mkdir -p "$DIR/datos"
+          # Copia completa (estructura + datos) para restaurar con pg_restore
+          pg_dump "$PGURL" --format=custom --no-owner --no-privileges \
+            --schema=public --schema=app --file="$DIR/base-completa-$FECHA.dump"
+          ls -lh "$DIR"
+
+      - name: Datos en CSV (para abrir en Excel)
+        run: |
+          DIR="$RUNNER_TEMP/respaldo/datos"
+          exportar() {  # $1 = archivo, $2 = consulta
+            psql "$PGURL" -v ON_ERROR_STOP=1 -q -c "\\copy ($2) to '$DIR/$1.csv' with (format csv, header)"
+            # Marca UTF-8 al inicio: así Excel muestra bien las tildes y la ñ
+            printf '\xEF\xBB\xBF' | cat - "$DIR/$1.csv" > "$DIR/$1.tmp" && mv "$DIR/$1.tmp" "$DIR/$1.csv"
+          }
+          exportar organizaciones "select id, nombre, slug, activa, plan, licencia_vence, max_usuarios, contacto, created_at from public.organizaciones order by nombre"
+          exportar usuarios "select p.user_id, p.nombre, p.email, m.org_id, o.nombre as organizacion, m.rol, m.activo, m.created_at from public.perfiles p left join public.miembros m on m.user_id = p.user_id left join public.organizaciones o on o.id = m.org_id order by o.nombre, p.nombre"
+          exportar formularios "select f.id, f.org_id, o.nombre as organizacion, f.nombre, f.activo, f.version_actual, f.created_at, f.updated_at from public.formularios f join public.organizaciones o on o.id = f.org_id order by o.nombre, f.nombre"
+          exportar formularios_versiones "select formulario_id, version, publicado_en, schema::text as preguntas from public.formulario_versiones order by formulario_id, version"
+          exportar encuestas "select r.id, o.nombre as organizacion, f.nombre as formulario, r.formulario_version, r.estado, p.nombre as tecnico, p.email as tecnico_correo, r.creado_en, r.actualizado_en, r.recibido_en, r.eliminado, r.captura_lat, r.captura_lon, r.captura_inicio_precision, r.finca_lat, r.finca_lon, r.distancia_finca_m, r.duracion_s, array_to_string(r.alertas, ';') as alertas, r.datos::text as respuestas from public.registros_panel r join public.organizaciones o on o.id = r.org_id join public.formularios f on f.id = r.formulario_id left join public.perfiles p on p.user_id = r.creado_por order by r.creado_en"
+          exportar encuestas_historial "select registro_id, revision, estado, cambiado_por, cambiado_en, datos::text as respuestas from public.registros_historial order by registro_id, revision"
+          exportar fotos_y_firmas "select a.id, a.registro_id, a.campo_key, a.tipo, a.origen, a.storage_path, a.bytes, a.latitud, a.longitud, a.precision, a.tomada_en, a.creado_en from public.archivos a order by a.creado_en"
+          ls -lh "$DIR"
+
+      - name: Subir la copia de la base a Drive
+        run: |
+          rclone copy "$RUNNER_TEMP/respaldo" "gdrive:$CARPETA/base de datos/$FECHA" --stats-one-line
+          # Se conservan los últimos 60 días de copias de la base
+          rclone delete "gdrive:$CARPETA/base de datos" --min-age 60d
+          rclone rmdirs "gdrive:$CARPETA/base de datos" --leave-root
+
+      - name: Copiar fotos y firmas nuevas a Drive
+        run: |
+          # "copy" solo agrega: nunca borra en Drive lo que se haya borrado en Supabase
+          rclone copy "supa:campo-archivos" "gdrive:$CARPETA/fotos" --transfers 4 --stats-one-line
+          rclone size "gdrive:$CARPETA/fotos"

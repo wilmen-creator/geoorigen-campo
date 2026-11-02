@@ -1,8 +1,11 @@
 name: Publicar APK
 
 # Se publica una versión creando una etiqueta, por ejemplo:  git tag v2.0.1 && git push origin v2.0.1
-# El APK queda firmado con la llave fija de GeoOrigen y con un enlace público
-# en GitHub Releases (no vence y no pide cuenta de GitHub para descargarlo).
+# El APK queda firmado con la llave fija de GeoOrigen y con un enlace público en
+# GitHub Releases del repositorio PÚBLICO wilmen-creator/geoorigen-campo-descargas
+# (solo el instalador; el código queda privado). No vence ni pide cuenta de GitHub.
+# Necesita el secreto DESCARGAS_TOKEN: token de GitHub con permiso "Contents: Read
+# and write" solo sobre ese repositorio.
 
 on:
   push:
@@ -26,12 +29,17 @@ jobs:
           echo "nombre=$NOMBRE" >> "$GITHUB_OUTPUT"
           echo "codigo=$((100 + GITHUB_RUN_NUMBER))" >> "$GITHUB_OUTPUT"
 
-      - name: Comprobar secretos de firma
+      - name: Comprobar secretos de firma y de descargas
         env:
           LLAVE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          DESCARGAS: ${{ secrets.DESCARGAS_TOKEN }}
         run: |
           if [ -z "$LLAVE" ]; then
             echo "::error::Falta el secreto ANDROID_KEYSTORE_BASE64. Sin la llave fija no se publica (las actualizaciones no se podrían instalar encima)."
+            exit 1
+          fi
+          if [ -z "$DESCARGAS" ]; then
+            echo "::error::Falta el secreto DESCARGAS_TOKEN (publicar en wilmen-creator/geoorigen-campo-descargas)."
             exit 1
           fi
 
@@ -86,12 +94,24 @@ jobs:
           rm -f "$ANDROID_KEYSTORE_PATH"
           cp app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/GeoOrigen-Campo-${{ steps.version.outputs.nombre }}.apk"
 
-      - name: Publicar en GitHub Releases
+      - name: Publicar en el repositorio público de descargas
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.DESCARGAS_TOKEN }}
         run: |
           APK="$RUNNER_TEMP/GeoOrigen-Campo-${{ steps.version.outputs.nombre }}.apk"
           cp "$APK" "$RUNNER_TEMP/GeoOrigen-Campo.apk"
           gh release create "$GITHUB_REF_NAME" "$APK" "$RUNNER_TEMP/GeoOrigen-Campo.apk" \
+            --repo wilmen-creator/geoorigen-campo-descargas \
+            --title "GeoOrigen Campo ${{ steps.version.outputs.nombre }}" \
+            --notes "Descarga **GeoOrigen-Campo.apk** e instálalo en el celular. Si ya tienes la app, se actualiza sin perder tus encuestas."
+
+      # Transición: mientras este repositorio siga público, también se publica aquí para
+      # que las apps de versiones anteriores (que miran este repo) vean el aviso.
+      - name: Publicar también aquí (transición)
+        if: ${{ !github.event.repository.private }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" "$RUNNER_TEMP/GeoOrigen-Campo-${{ steps.version.outputs.nombre }}.apk" "$RUNNER_TEMP/GeoOrigen-Campo.apk" \
             --title "GeoOrigen Campo ${{ steps.version.outputs.nombre }}" \
             --notes "Descarga **GeoOrigen-Campo.apk** e instálalo en el celular. Si ya tienes la app, se actualiza sin perder tus encuestas."

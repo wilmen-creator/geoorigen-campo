@@ -45,8 +45,9 @@ export async function tomarFoto(opciones: {
     foto = await Camera.getPhoto({
       source: opciones.desdeGaleria ? CameraSource.Photos : CameraSource.Camera,
       resultType: CameraResultType.Base64,
-      quality: 60,           // comprimidas: cada foto queda en unos cientos de KB
-      width: 1600,
+      // Comprimidas para el plan gratis (1 GB): unos 150–200 KB por foto, nítidas en pantalla
+      quality: 55,
+      width: 1280,
       correctOrientation: true,
       saveToGallery: false,
       webUseInput: true,

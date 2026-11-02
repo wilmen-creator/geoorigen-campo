@@ -1,7 +1,9 @@
 // Aviso de versión nueva: compara la versión instalada con la última publicada
 // en GitHub Releases. Si no hay señal, simplemente no avisa.
+// El APK se publica en un repositorio público aparte, solo con el instalador:
+// el código de la app vive en un repositorio privado.
 
-const REPO = 'wilmen-creator/geoorigen-campo';
+const REPO = 'wilmen-creator/geoorigen-campo-descargas';
 export const ENLACE_DESCARGA = `https://github.com/${REPO}/releases/latest/download/GeoOrigen-Campo.apk`;
 
 function esMayor(a: string, b: string): boolean {
